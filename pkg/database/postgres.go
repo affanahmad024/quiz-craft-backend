@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -63,6 +64,22 @@ func InitPostgres(cfg *config.DatabaseConfig) error {
 // GetDB returns the database instance
 func GetDB() *gorm.DB {
 	return DB
+}
+
+// GetSQLDB returns the underlying *sql.DB from GORM
+// This is needed for the DAO layer which uses raw SQL
+func GetSQLDB() *sql.DB {
+	if DB == nil {
+		return nil
+	}
+
+	sqlDB, err := DB.DB()
+	if err != nil {
+		logger.GetLogger().Errorf("Failed to get *sql.DB from GORM: %v", err)
+		return nil
+	}
+
+	return sqlDB
 }
 
 // Close closes the database connection

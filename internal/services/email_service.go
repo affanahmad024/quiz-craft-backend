@@ -2,11 +2,13 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 
 	"github.com/affanahmad024/quiz-craft/backend/internal/config"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
+	"github.com/google/uuid"
 	"gopkg.in/gomail.v2"
 )
 
@@ -32,11 +34,11 @@ func NewEmailService(cfg *config.EmailConfig) *EmailService {
 }
 
 // SendVerificationEmail sends email verification link
-func (s *EmailService) SendVerificationEmail(toEmail, toName, token string, userID string) error {
+func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, toName, token string, userID uuid.UUID) error {
 	subject := "Verify Your Email - QuizCraft"
 
 	// Create verification link (adjust based on your frontend URL)
-	verificationLink := fmt.Sprintf("http://localhost:3000/verify-email?token=%s&user_id=%s", token, userID)
+	verificationLink := fmt.Sprintf("http://localhost:3000/verify-email?token=%s&user_id=%s", token, userID.String())
 
 	// Email body
 	body := s.renderVerificationEmail(toName, verificationLink)
@@ -45,11 +47,11 @@ func (s *EmailService) SendVerificationEmail(toEmail, toName, token string, user
 }
 
 // SendPasswordResetEmail sends password reset link
-func (s *EmailService) SendPasswordResetEmail(toEmail, toName, token string, userID string) error {
+func (s *EmailService) SendPasswordResetEmail(ctx context.Context, toEmail, toName, token string, userID uuid.UUID) error {
 	subject := "Reset Your Password - QuizCraft"
 
 	// Create reset link (adjust based on your frontend URL)
-	resetLink := fmt.Sprintf("http://localhost:3000/reset-password?token=%s&user_id=%s", token, userID)
+	resetLink := fmt.Sprintf("http://localhost:3000/reset-password?token=%s&user_id=%s", token, userID.String())
 
 	// Email body
 	body := s.renderPasswordResetEmail(toName, resetLink)
@@ -58,7 +60,7 @@ func (s *EmailService) SendPasswordResetEmail(toEmail, toName, token string, use
 }
 
 // SendWelcomeEmail sends welcome email after successful verification
-func (s *EmailService) SendWelcomeEmail(toEmail, toName string) error {
+func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail, toName string) error {
 	subject := "Welcome to QuizCraft!"
 
 	body := s.renderWelcomeEmail(toName)
@@ -67,7 +69,7 @@ func (s *EmailService) SendWelcomeEmail(toEmail, toName string) error {
 }
 
 // SendPasswordChangedEmail sends notification when password is changed
-func (s *EmailService) SendPasswordChangedEmail(toEmail, toName string) error {
+func (s *EmailService) SendPasswordChangedEmail(ctx context.Context, toEmail, toName string) error {
 	subject := "Your Password Has Been Changed - QuizCraft"
 
 	body := s.renderPasswordChangedEmail(toName)
