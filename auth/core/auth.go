@@ -217,9 +217,10 @@ func Login(ctx context.Context, req model.LoginRequest) (model.LoginResponse, er
 		return model.LoginResponse{}, commons.Unauthorized("invalid-credentials")
 	}
 
-	// Check if account is locked
-	if pwdDAO.AccountLockedUntil.Valid && time.Now().Before(pwdDAO.AccountLockedUntil.Time) {
-		commons.LogW(ctx, "[core.Login::AccountLocked [user_id=%s [until=%v", userDAO.ID, pwdDAO.AccountLockedUntil.Time)
+	// Check if account is locked (using helper method)
+	if pwdDAO.IsAccountLocked() {
+		meta := pwdDAO.GetMeta()
+		commons.LogW(ctx, "[core.Login::AccountLocked [user_id=%s [until=%v", userDAO.ID, meta.AccountLockedUntil)
 		return model.LoginResponse{}, commons.Unauthorized("account-locked")
 	}
 
@@ -228,11 +229,14 @@ func Login(ctx context.Context, req model.LoginRequest) (model.LoginResponse, er
 	if err != nil {
 		commons.LogW(ctx, "[core.Login::InvalidPassword [user_id=%s", userDAO.ID)
 
+		// Get current meta to check failed attempts
+		meta := pwdDAO.GetMeta()
+
 		// Increment failed attempts
 		dao.IncrementFailedAttempts(ctx, userDAO.ID)
 
-		// Check if we need to lock account
-		if pwdDAO.FailedLoginAttempts+1 >= constants.MaxFailedAttempts {
+		// Check if we need to lock account (after incrementing)
+		if meta.FailedLoginAttempts+1 >= constants.MaxFailedAttempts {
 			lockUntil := time.Now().Add(time.Duration(constants.AccountLockoutMinutes) * time.Minute)
 			dao.LockAccount(ctx, userDAO.ID, lockUntil)
 			commons.LogW(ctx, "[core.Login::AccountLockedDueToFailedAttempts [user_id=%s", userDAO.ID)

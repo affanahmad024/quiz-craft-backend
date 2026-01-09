@@ -15,11 +15,19 @@ import (
 func CreatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
 	commons.Log(ctx, "[dao.CreatePassword [user_id=%s", userID)
 
-	qry := `INSERT INTO user_passwords (user_id, password_hash, password_history, failed_login_attempts,
-			must_change_password, two_factor_enabled, last_password_change, meta, created_at, updated_at)
-			VALUES ($1, $2, '[]'::jsonb, 0, false, false, NOW(), '{}'::jsonb, NOW(), NOW())`
+	// Initialize meta with default security values
+	now := time.Now()
+	meta := model.PasswordMeta{
+		FailedLoginAttempts: 0,
+		LastPasswordChange:  &now,
+		MustChangePassword:  false,
+	}
+	metaJSON, _ := json.Marshal(meta)
 
-	_, err := db.ExecContext(ctx, qry, userID, passwordHash)
+	qry := `INSERT INTO user_passwords (user_id, password_hash, password_history, meta, created_at, updated_at)
+			VALUES ($1, $2, '[]'::jsonb, $3, NOW(), NOW())`
+
+	_, err := db.ExecContext(ctx, qry, userID, passwordHash, metaJSON)
 	if err != nil {
 		commons.LogE(ctx, "[dao.CreatePassword::SQLErr [user_id=%s [err=%v", userID, err)
 		return err
@@ -33,9 +41,11 @@ func FindPasswordByUserID(ctx context.Context, userID uuid.UUID) (model.UserPass
 	commons.Log(ctx, "[dao.FindPasswordByUserID [user_id=%s", userID)
 
 	pwd := model.UserPasswordDAO{}
-	qry := `SELECT id, user_id, password_hash, password_history, verification_token, verification_token_expiry,
-			reset_token, reset_token_expiry, failed_login_attempts, last_failed_login, account_locked_until,
-			last_password_change, must_change_password, two_factor_enabled, two_factor_secret, meta, created_at, updated_at
+	qry := `SELECT id, user_id, password_hash, password_history,
+			verification_token, verification_token_expiry,
+			reset_token, reset_token_expiry,
+			two_factor_enabled, two_factor_secret,
+			meta, created_at, updated_at
 			FROM user_passwords
 			WHERE user_id = $1`
 
@@ -48,11 +58,6 @@ func FindPasswordByUserID(ctx context.Context, userID uuid.UUID) (model.UserPass
 		&pwd.VerificationTokenExpiry,
 		&pwd.ResetToken,
 		&pwd.ResetTokenExpiry,
-		&pwd.FailedLoginAttempts,
-		&pwd.LastFailedLogin,
-		&pwd.AccountLockedUntil,
-		&pwd.LastPasswordChange,
-		&pwd.MustChangePassword,
 		&pwd.TwoFactorEnabled,
 		&pwd.TwoFactorSecret,
 		&pwd.Meta,
@@ -133,9 +138,11 @@ func FindByVerificationToken(ctx context.Context, token string) (model.UserPassw
 	commons.Log(ctx, "[dao.FindByVerificationToken")
 
 	pwd := model.UserPasswordDAO{}
-	qry := `SELECT id, user_id, password_hash, password_history, verification_token, verification_token_expiry,
-			reset_token, reset_token_expiry, failed_login_attempts, last_failed_login, account_locked_until,
-			last_password_change, must_change_password, two_factor_enabled, two_factor_secret, meta, created_at, updated_at
+	qry := `SELECT id, user_id, password_hash, password_history,
+			verification_token, verification_token_expiry,
+			reset_token, reset_token_expiry,
+			two_factor_enabled, two_factor_secret,
+			meta, created_at, updated_at
 			FROM user_passwords
 			WHERE verification_token = $1`
 
@@ -148,11 +155,6 @@ func FindByVerificationToken(ctx context.Context, token string) (model.UserPassw
 		&pwd.VerificationTokenExpiry,
 		&pwd.ResetToken,
 		&pwd.ResetTokenExpiry,
-		&pwd.FailedLoginAttempts,
-		&pwd.LastFailedLogin,
-		&pwd.AccountLockedUntil,
-		&pwd.LastPasswordChange,
-		&pwd.MustChangePassword,
 		&pwd.TwoFactorEnabled,
 		&pwd.TwoFactorSecret,
 		&pwd.Meta,
@@ -210,9 +212,11 @@ func FindByResetToken(ctx context.Context, token string) (model.UserPasswordDAO,
 	commons.Log(ctx, "[dao.FindByResetToken")
 
 	pwd := model.UserPasswordDAO{}
-	qry := `SELECT id, user_id, password_hash, password_history, verification_token, verification_token_expiry,
-			reset_token, reset_token_expiry, failed_login_attempts, last_failed_login, account_locked_until,
-			last_password_change, must_change_password, two_factor_enabled, two_factor_secret, meta, created_at, updated_at
+	qry := `SELECT id, user_id, password_hash, password_history,
+			verification_token, verification_token_expiry,
+			reset_token, reset_token_expiry,
+			two_factor_enabled, two_factor_secret,
+			meta, created_at, updated_at
 			FROM user_passwords
 			WHERE reset_token = $1`
 
@@ -225,11 +229,6 @@ func FindByResetToken(ctx context.Context, token string) (model.UserPasswordDAO,
 		&pwd.VerificationTokenExpiry,
 		&pwd.ResetToken,
 		&pwd.ResetTokenExpiry,
-		&pwd.FailedLoginAttempts,
-		&pwd.LastFailedLogin,
-		&pwd.AccountLockedUntil,
-		&pwd.LastPasswordChange,
-		&pwd.MustChangePassword,
 		&pwd.TwoFactorEnabled,
 		&pwd.TwoFactorSecret,
 		&pwd.Meta,
@@ -248,12 +247,22 @@ func FindByResetToken(ctx context.Context, token string) (model.UserPasswordDAO,
 	return pwd, nil
 }
 
-// IncrementFailedAttempts increments failed login attempts
+// IncrementFailedAttempts increments failed login attempts in JSONB meta
 func IncrementFailedAttempts(ctx context.Context, userID uuid.UUID) error {
 	commons.Log(ctx, "[dao.IncrementFailedAttempts [user_id=%s", userID)
 
+	// Update meta JSONB: increment failed_login_attempts and set last_failed_login
 	qry := `UPDATE user_passwords
-			SET failed_login_attempts = failed_login_attempts + 1, last_failed_login = NOW(), updated_at = NOW()
+			SET meta = jsonb_set(
+					jsonb_set(
+						meta,
+						'{failed_login_attempts}',
+						(COALESCE((meta->>'failed_login_attempts')::int, 0) + 1)::text::jsonb
+					),
+					'{last_failed_login}',
+					to_jsonb(NOW())
+				),
+				updated_at = NOW()
 			WHERE user_id = $1`
 
 	_, err := db.ExecContext(ctx, qry, userID)
@@ -265,12 +274,22 @@ func IncrementFailedAttempts(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
-// ResetFailedAttempts resets failed login attempts to 0
+// ResetFailedAttempts resets failed login attempts to 0 in JSONB meta
 func ResetFailedAttempts(ctx context.Context, userID uuid.UUID) error {
 	commons.Log(ctx, "[dao.ResetFailedAttempts [user_id=%s", userID)
 
+	// Reset failed attempts and clear account lock
 	qry := `UPDATE user_passwords
-			SET failed_login_attempts = 0, account_locked_until = NULL, updated_at = NOW()
+			SET meta = jsonb_set(
+					jsonb_set(
+						meta,
+						'{failed_login_attempts}',
+						'0'::jsonb
+					),
+					'{account_locked_until}',
+					'null'::jsonb
+				),
+				updated_at = NOW()
 			WHERE user_id = $1`
 
 	_, err := db.ExecContext(ctx, qry, userID)
@@ -282,12 +301,13 @@ func ResetFailedAttempts(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
-// LockAccount locks user account until specified time
+// LockAccount locks user account until specified time in JSONB meta
 func LockAccount(ctx context.Context, userID uuid.UUID, until time.Time) error {
 	commons.Log(ctx, "[dao.LockAccount [user_id=%s [until=%v", userID, until)
 
 	qry := `UPDATE user_passwords
-			SET account_locked_until = $1, updated_at = NOW()
+			SET meta = jsonb_set(meta, '{account_locked_until}', to_jsonb($1)),
+				updated_at = NOW()
 			WHERE user_id = $2`
 
 	_, err := db.ExecContext(ctx, qry, until, userID)

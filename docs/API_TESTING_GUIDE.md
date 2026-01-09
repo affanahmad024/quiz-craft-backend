@@ -4,14 +4,14 @@ Complete guide to test all authentication and user management endpoints.
 
 ## Prerequisites
 
-1. **Start Docker services:**
-   ```bash
-   docker-compose -f deployments/docker/docker-compose.yml up -d
-   ```
+1. **Ensure PostgreSQL and Redis are running:**
+   - PostgreSQL on port 5432
+   - Redis on port 6379
 
 2. **Run the application:**
    ```bash
-   go run cmd/server/main.go
+   cd backend
+   go run main.go
    ```
 
 3. **Server should be running on:** `http://localhost:8080`
@@ -48,10 +48,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
   -d '{
     "email": "john.doe@example.com",
     "password": "SecurePass123!",
-    "name": "John Doe",
-    "phone_number": "+1234567890"
+    "name": "John Doe"
   }'
 ```
+
+**Note:** `phone_number` is optional and can be omitted.
 
 **Expected Response:**
 ```json
@@ -205,6 +206,102 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
     "password": "SecurePass123!"
   }'
 ```
+
+---
+
+## 4.5. Brute-Force Protection Testing 🔒
+
+**The application includes built-in brute-force attack protection:**
+- After **5 failed login attempts**, the account is **locked for 30 minutes**
+- Failed attempts are tracked in the database using JSONB metadata
+- Account lockout is automatic and temporary
+
+### Test Account Lockout
+
+**Step 1:** Create and verify a test user:
+```bash
+# Create user
+curl -X POST http://localhost:8080/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "bruteforce.test@example.com",
+    "password": "CorrectPass123!",
+    "name": "Brute Force Test"
+  }'
+
+# Verify email (check logs for token)
+# Then login successfully once to verify the account
+```
+
+**Step 2:** Make 5 failed login attempts (wrong password):
+```bash
+# Attempt 1
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bruteforce.test@example.com","password":"WrongPass1!"}'
+
+# Attempt 2
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bruteforce.test@example.com","password":"WrongPass2!"}'
+
+# Attempt 3
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bruteforce.test@example.com","password":"WrongPass3!"}'
+
+# Attempt 4
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bruteforce.test@example.com","password":"WrongPass4!"}'
+
+# Attempt 5 - This will trigger the lockout
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bruteforce.test@example.com","password":"WrongPass5!"}'
+```
+
+**Expected Response (after 5th attempt):**
+```json
+{
+  "success": false,
+  "message": "Unauthorized",
+  "error": "account-locked-due-to-failed-attempts"
+}
+```
+
+**Step 3:** Try logging in with the CORRECT password (should still be locked):
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bruteforce.test@example.com","password":"CorrectPass123!"}'
+```
+
+**Expected Response:**
+```json
+{
+  "success": false,
+  "message": "Unauthorized",
+  "error": "account-locked"
+}
+```
+
+**Step 4:** Check the database to see the lockout details:
+```bash
+psql -U postgres -d quiz_craft -c "SELECT user_id, meta->>'failed_login_attempts' as failed_attempts, meta->>'account_locked_until' as locked_until FROM user_passwords WHERE user_id IN (SELECT id FROM users WHERE email = 'bruteforce.test@example.com');"
+```
+
+**What you should see:**
+- `failed_attempts`: 5
+- `locked_until`: A timestamp 30 minutes from the 5th failed attempt
+
+### Security Features Demonstrated
+
+✅ **Failed Login Tracking** - Each wrong password increments a counter
+✅ **Automatic Lockout** - After 5 attempts, account locks for 30 minutes
+✅ **Temporal Lock** - Lock automatically expires after 30 minutes
+✅ **JSONB Storage** - Security metadata stored efficiently in `meta` field
+✅ **Lock Bypassing Prevention** - Even correct passwords won't work during lockout
 
 ---
 
@@ -477,7 +574,17 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 2. **Check logs:** Application logs show detailed error messages
 3. **Database:** Use pgAdmin or `psql` to inspect database state
 4. **Postman:** Import these as Postman collection for easier testing
-5. **Email:** Configure SMTP in `.env` to receive actual emails
+5. **Email Configuration:** Update `.env` with valid SMTP credentials to receive emails:
+   ```env
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USERNAME=your-email@gmail.com
+   SMTP_PASSWORD=your-app-password
+   SMTP_FROM_EMAIL=noreply@yourapp.com
+   SMTP_FROM_NAME=YourApp
+   ```
+   **Note:** For Gmail, you need to use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password.
+6. **Check Verification Tokens:** If emails aren't configured, verification tokens are logged in the console
 
 ---
 
@@ -504,16 +611,35 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 
 ## ✅ Success Checklist
 
+### Core Authentication
 - [ ] Health check returns healthy
 - [ ] User signup works
-- [ ] Email verification works
+- [ ] Email verification works (or tokens logged to console)
 - [ ] Login returns tokens
 - [ ] Protected endpoints require authentication
-- [ ] Profile update works
-- [ ] Password change works
-- [ ] Soft delete works
-- [ ] Deleted users can't login
 - [ ] Token refresh works
 - [ ] Logout clears cookies
 
-**All checked? Phase 2 is working perfectly!** 🎉
+### User Management
+- [ ] Profile retrieval works
+- [ ] Profile update works
+- [ ] Password change works
+- [ ] Forgot password flow works
+- [ ] Password reset with token works
+- [ ] Soft delete works
+- [ ] Deleted users can't login
+
+### Security Features 🔒
+- [ ] Brute-force protection: 5 failed attempts locks account
+- [ ] Account lockout lasts 30 minutes
+- [ ] Correct password doesn't work during lockout
+- [ ] Failed attempts are tracked in database `meta` JSONB field
+- [ ] Lockout automatically expires after timeout
+
+### Database & Architecture
+- [ ] JSONB `meta` field stores security metadata
+- [ ] Password history tracked (prevents reuse)
+- [ ] Migrations create correct schema
+- [ ] All queries use proper column names
+
+**All checked? Phase 2 with brute-force protection is working perfectly!** 🎉🔒
