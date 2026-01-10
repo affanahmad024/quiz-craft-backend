@@ -1,0 +1,22 @@
+basePath: /api/v1
+host: localhost:8080
+info:
+  contact:
+    email: support@quizcraft.com
+    name: API Support
+  description: A comprehensive quiz management and taking platform with AI-powered
+    quiz generation
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: QuizCraft API
+  version: "1.0"
+paths: {}
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
