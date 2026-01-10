@@ -23,6 +23,15 @@ type Quiz struct {
 	IsPublic         bool           `json:"is_public"`
 	ThumbnailURL     string         `json:"thumbnail_url,omitempty"`
 	Tags             pq.StringArray `json:"tags,omitempty"`
+
+	// Phase 6: Advanced Features
+	ShareCode          *string    `json:"share_code,omitempty"`
+	ShareCount         int        `json:"share_count"`
+	ViewCount          int        `json:"view_count"`
+	IsTemplate         bool       `json:"is_template"`
+	TemplateUsageCount int        `json:"template_usage_count"`
+	BasedOnTemplateID  *string    `json:"based_on_template_id,omitempty"`
+
 	Meta             JSONMap        `json:"meta,omitempty"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`

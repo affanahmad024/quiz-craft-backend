@@ -242,6 +242,29 @@ func initExt() {
 	quizzes.POST("/:id/attempts", api.StartAttempt)            // Start quiz attempt
 	quizzes.GET("/:id/stats", api.GetQuizStats)                // Get quiz stats (creator only)
 
+	// Phase 6: Search and Discovery
+	v1.GET("/quizzes/search", api.SearchQuizzes)              // Search quizzes (public)
+	v1.GET("/categories", api.GetCategories)                   // Get categories (public)
+	v1.GET("/tags", api.GetPopularTags)                        // Get popular tags (public)
+	v1.GET("/share/:code", api.GetQuizByShareCode)             // Get quiz by share code (public)
+
+	// Phase 6: Quiz Statistics and Sharing (protected)
+	quizzes.GET("/:id/statistics", api.GetQuizStatistics)      // Get quiz statistics (creator only)
+	quizzes.POST("/:id/share", api.GenerateShareLink)          // Generate share link (creator only)
+
+	// Phase 6: User Statistics (protected)
+	users.GET("/me/statistics", api.GetUserStatistics)         // Get my statistics
+
+	// Phase 6: Templates (protected)
+	templates := v1.Group("/templates")
+	templates.Use(middleware.Auth(jwtManager))
+	{
+		templates.GET("", api.ListTemplates)                   // List templates
+		templates.POST("/:id/use", api.CreateQuizFromTemplate) // Create quiz from template
+	}
+
+	// Template creation from quiz (protected)
+	quizzes.POST("/:id/save-as-template", api.SaveQuizAsTemplate) // Save quiz as template
 
 	// Create HTTP server
 	extAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)

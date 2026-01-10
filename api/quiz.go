@@ -748,3 +748,127 @@ func DeleteAnswer(c *gin.Context) {
 		time.Since(st), ip, answerID)
 	commons.RespOKWithMsg(c, "Answer deleted successfully", nil)
 }
+
+// Phase 6: Advanced Features - Statistics and Sharing
+
+// GetQuizStatistics gets detailed statistics for a quiz (creator only)
+func GetQuizStatistics(c *gin.Context) {
+	st := time.Now()
+	ctx := commons.Ctx(c)
+	tid := commons.Tid(ctx)
+	c.Set(commons.TidRespHdr, tid)
+	ip := c.ClientIP()
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	quizID := c.Param("id")
+	includeQuestions := c.Query("include_questions") == "true"
+
+	commons.Log(ctx, "[api.GetQuizStatistics [user_id=%s [quiz_id=%s", userID, quizID)
+
+	stats, err := core.GetQuizStatistics(ctx, quizID, userID.String(), includeQuestions)
+	if err != nil {
+		commons.LogC(ctx, "[api.GetQuizStatistics::KO [time_taken=%v [ip=%s [quiz_id=%s [err=%v",
+			time.Since(st), ip, quizID, err)
+
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, commons.GetCode(err))
+			return
+		}
+		if commons.IsForbidden(err) {
+			commons.Resp403(c, commons.GetCode(err))
+			return
+		}
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	commons.Log(ctx, "[api.GetQuizStatistics::OK [time_taken=%v [ip=%s [quiz_id=%s",
+		time.Since(st), ip, quizID)
+	commons.RespOKWithMsg(c, "Quiz statistics retrieved successfully", stats)
+}
+
+// GetUserStatistics gets aggregate statistics for current user
+func GetUserStatistics(c *gin.Context) {
+	st := time.Now()
+	ctx := commons.Ctx(c)
+	tid := commons.Tid(ctx)
+	c.Set(commons.TidRespHdr, tid)
+	ip := c.ClientIP()
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	commons.Log(ctx, "[api.GetUserStatistics [user_id=%s", userID)
+
+	stats, err := core.GetUserStatistics(ctx, userID.String())
+	if err != nil {
+		commons.LogC(ctx, "[api.GetUserStatistics::KO [time_taken=%v [ip=%s [user_id=%s [err=%v",
+			time.Since(st), ip, userID, err)
+
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	commons.Log(ctx, "[api.GetUserStatistics::OK [time_taken=%v [ip=%s [user_id=%s",
+		time.Since(st), ip, userID)
+	commons.RespOKWithMsg(c, "User statistics retrieved successfully", stats)
+}
+
+// GenerateShareLink generates a share link for a quiz
+func GenerateShareLink(c *gin.Context) {
+	st := time.Now()
+	ctx := commons.Ctx(c)
+	tid := commons.Tid(ctx)
+	c.Set(commons.TidRespHdr, tid)
+	ip := c.ClientIP()
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	quizID := c.Param("id")
+	commons.Log(ctx, "[api.GenerateShareLink [user_id=%s [quiz_id=%s", userID, quizID)
+
+	result, err := core.GenerateShareLink(ctx, quizID, userID.String())
+	if err != nil {
+		commons.LogC(ctx, "[api.GenerateShareLink::KO [time_taken=%v [ip=%s [quiz_id=%s [err=%v",
+			time.Since(st), ip, quizID, err)
+
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, commons.GetCode(err))
+			return
+		}
+		if commons.IsForbidden(err) {
+			commons.Resp403(c, commons.GetCode(err))
+			return
+		}
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	commons.Log(ctx, "[api.GenerateShareLink::OK [time_taken=%v [ip=%s [quiz_id=%s [code=%s",
+		time.Since(st), ip, quizID, result.ShareCode)
+	commons.RespOKWithMsg(c, "Share link generated successfully", result)
+}
