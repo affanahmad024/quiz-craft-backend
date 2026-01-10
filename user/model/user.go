@@ -14,12 +14,14 @@ type UserDAO struct {
 	Email         string
 	Name          string
 	PhoneNumber   sql.NullString
+	Role          string // Phase 7: user role (user, admin)
 	EmailVerified bool
 	Enabled       bool
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	DeletedAt     sql.NullTime
-	Meta          []byte // JSONB stored as bytes
+	LastLoginAt   sql.NullTime // Phase 7: track last login
+	Meta          []byte       // JSONB stored as bytes
 }
 
 // UserAPI represents user data for API responses (native Go types)
@@ -28,10 +30,12 @@ type UserAPI struct {
 	Email         string                 `json:"email"`
 	Name          string                 `json:"name"`
 	PhoneNumber   string                 `json:"phone_number,omitempty"`
+	Role          string                 `json:"role"`               // Phase 7: user role
 	EmailVerified bool                   `json:"email_verified"`
 	Enabled       bool                   `json:"enabled"`
 	CreatedAt     string                 `json:"created_at"`
 	UpdatedAt     string                 `json:"updated_at"`
+	LastLoginAt   *string                `json:"last_login_at,omitempty"` // Phase 7: last login
 	Meta          map[string]interface{} `json:"meta,omitempty"`
 }
 
@@ -41,6 +45,7 @@ func (u *UserDAO) ToAPI() UserAPI {
 		ID:            u.ID,
 		Email:         u.Email,
 		Name:          u.Name,
+		Role:          u.Role,
 		EmailVerified: u.EmailVerified,
 		Enabled:       u.Enabled,
 		CreatedAt:     u.CreatedAt.Format(time.RFC3339),
@@ -49,6 +54,11 @@ func (u *UserDAO) ToAPI() UserAPI {
 
 	if u.PhoneNumber.Valid {
 		api.PhoneNumber = u.PhoneNumber.String
+	}
+
+	if u.LastLoginAt.Valid {
+		lastLogin := u.LastLoginAt.Time.Format(time.RFC3339)
+		api.LastLoginAt = &lastLogin
 	}
 
 	// Parse JSONB meta

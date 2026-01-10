@@ -174,12 +174,12 @@ func initExt() {
 		users.GET("/me", api.GetUserProfile)
 		users.PATCH("/me", api.UpdateProfile)
 		users.DELETE("/me", api.DeleteAccount)
-		users.GET("", api.ListUsers)
+		users.GET("", api.AdminListUsers)
 		users.GET("/stats", api.GetUserStats)
 		users.GET("/:id", api.GetUserByID)
 		users.POST("/:id/restore", api.RestoreUser)
-		users.POST("/:id/disable", api.DisableUser)
-		users.POST("/:id/enable", api.EnableUser)
+		users.POST("/:id/disable", api.AdminDisableUser)
+		users.POST("/:id/enable", api.AdminEnableUser)
 	}
 
 	// Quiz endpoints (protected)
@@ -265,6 +265,30 @@ func initExt() {
 
 	// Template creation from quiz (protected)
 	quizzes.POST("/:id/save-as-template", api.SaveQuizAsTemplate) // Save quiz as template
+
+	// Phase 7: Admin Dashboard (protected - admin only)
+	admin := v1.Group("/admin")
+	admin.Use(middleware.Auth(jwtManager))
+	admin.Use(middleware.RequireAdmin())
+	{
+		// User Management
+		admin.GET("/users", api.AdminListUsers)                  // List all users
+		admin.GET("/users/:id", api.GetUserDetails)         // Get user details
+		admin.PATCH("/users/:id/role", api.ChangeUserRole)  // Change user role
+		admin.POST("/users/:id/disable", api.AdminDisableUser)   // Disable user
+		admin.POST("/users/:id/enable", api.AdminEnableUser)     // Enable user
+		admin.DELETE("/users/:id", api.DeleteUser)          // Delete user (permanent)
+
+		// Quiz Moderation
+		admin.GET("/quizzes", api.ListQuizzesAdmin)         // List all quizzes
+		admin.GET("/quizzes/:id", api.GetQuizDetailsAdmin)  // Get quiz details
+		admin.DELETE("/quizzes/:id", api.DeleteQuizAdmin)   // Delete quiz
+
+		// Statistics
+		admin.GET("/stats", api.GetPlatformStats)           // Get platform statistics
+		admin.GET("/stats/activity", api.GetUserActivity)   // Get activity timeline
+		admin.GET("/logs", api.GetActivityLogs)             // Get activity logs
+	}
 
 	// Create HTTP server
 	extAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)

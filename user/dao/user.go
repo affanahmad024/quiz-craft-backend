@@ -59,7 +59,7 @@ func FindByID(ctx context.Context, id uuid.UUID) (model.UserDAO, error) {
 	commons.Log(ctx, "[dao.FindByID [id=%s", id)
 
 	user := model.UserDAO{}
-	qry := `SELECT id, email, name, phone_number, email_verified, enabled, created_at, updated_at, deleted_at, meta
+	qry := `SELECT id, email, name, phone_number, role, email_verified, enabled, created_at, updated_at, deleted_at, last_login_at, meta
 			FROM users
 			WHERE id = $1 AND deleted_at IS NULL`
 
@@ -68,11 +68,13 @@ func FindByID(ctx context.Context, id uuid.UUID) (model.UserDAO, error) {
 		&user.Email,
 		&user.Name,
 		&user.PhoneNumber,
+		&user.Role,
 		&user.EmailVerified,
 		&user.Enabled,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,
+		&user.LastLoginAt,
 		&user.Meta,
 	)
 
@@ -239,6 +241,26 @@ func UpdateEnabled(ctx context.Context, id uuid.UUID, enabled bool) error {
 	result, err := db.ExecContext(ctx, qry, enabled, id)
 	if err != nil {
 		commons.LogE(ctx, "[dao.UpdateEnabled::SQLErr [id=%s [err=%v", id, err)
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return commons.NotFound("user-not-found")
+	}
+
+	return nil
+}
+
+// UpdateRole updates user role (Phase 7: Admin)
+func UpdateRole(ctx context.Context, id uuid.UUID, role string) error {
+	commons.Log(ctx, "[dao.UpdateRole [id=%s [role=%s", id, role)
+
+	qry := `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL`
+
+	result, err := db.ExecContext(ctx, qry, role, id)
+	if err != nil {
+		commons.LogE(ctx, "[dao.UpdateRole::SQLErr [id=%s [err=%v", id, err)
 		return err
 	}
 
