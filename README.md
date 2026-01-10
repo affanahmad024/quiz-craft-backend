@@ -2,40 +2,44 @@
 
 A production-ready Go backend for Quiz-Craft - an AI-powered quiz generation and management platform.
 
-## 🚀 Features
+## 🚀 Current Status
 
-- **Phase 1 (Completed)**: Foundation & Setup
-  - ✅ Project structure with clean architecture
-  - ✅ Configuration management (Viper + environment variables)
-  - ✅ PostgreSQL database connection with GORM
-  - ✅ Redis cache integration
-  - ✅ Database migrations (golang-migrate)
-  - ✅ Middleware (CORS, Logging, Error handling)
-  - ✅ Health check endpoints
-  - ✅ Docker Compose for local development
+### ✅ Phase 1: Foundation & Infrastructure (COMPLETE)
+- Clean architecture project structure
+- Configuration management (Viper + environment variables)
+- PostgreSQL database with GORM
+- Database migrations (golang-migrate)
+- Middleware (CORS, Logging, Error handling)
+- Health check endpoints
+- Docker Compose for local development
 
-- **Phase 2 (Completed)**: Authentication & User Management
-  - ✅ User registration with email verification
-  - ✅ JWT-based authentication (access + refresh tokens)
-  - ✅ Login/Logout functionality
-  - ✅ Password management (forgot, reset, change)
-  - ✅ User profile CRUD operations
-  - ✅ Soft delete with restore functionality
-  - ✅ Account locking after failed attempts
-  - ✅ Password history and strength validation
-  - ✅ Email service with HTML templates
-  - ✅ 17 authentication & user endpoints
+### ✅ Phase 2: Authentication & User Management (COMPLETE)
+- User registration with email verification
+- JWT-based authentication (access + refresh tokens)
+- Login/Logout functionality
+- Password management (forgot, reset, change)
+- User profile CRUD operations
+- Soft delete with restore functionality
+- Account locking after failed attempts
+- Password history and strength validation
+- Email service with HTML templates
+- **17 authentication & user endpoints**
 
-- **Phase 3 (Upcoming)**: Quiz Management (CRUD)
-- **Phase 4 (Upcoming)**: AI Integration & File Upload
-- **Phase 5 (Upcoming)**: Quiz Attempts & Scoring
+### 📋 Next Phases
+- **Phase 3**: Quiz Management (CRUD)
+- **Phase 4**: AI Integration & File Upload
+- **Phase 5**: Quiz Attempts & Scoring
+- **Phase 6**: Advanced Features
+- **Phase 7**: Admin Dashboard
+- **Phase 8**: Testing & Production
+
+**See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for complete roadmap**
 
 ## 📋 Prerequisites
 
-- Go 1.21 or higher
+- Go 1.25.3 or higher
 - Docker and Docker Compose
 - PostgreSQL 15+ (or use Docker)
-- Redis 7+ (or use Docker)
 
 ## 🛠️ Installation
 
@@ -55,18 +59,14 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
-### 4. Start PostgreSQL and Redis (using Docker)
+### 4. Start PostgreSQL (using Docker)
 ```bash
-make docker-up
-# or
 docker-compose -f deployments/docker/docker-compose.yml up -d
 ```
 
 ### 5. Run the application
 ```bash
-make run
-# or
-go run cmd/server/main.go
+go run main.go
 ```
 
 The API will be available at `http://localhost:8080`
@@ -75,48 +75,38 @@ The API will be available at `http://localhost:8080`
 
 ```
 backend/
-├── cmd/
-│   └── server/
-│       └── main.go                 # Application entry point
+├── main.go                        # Application entry point
+├── api/
+│   ├── auth.go                    # Auth endpoints
+│   └── user.go                    # User endpoints
+├── auth/
+│   └── core/                      # Auth business logic
+├── user/
+│   ├── dao/                       # Data Access Objects
+│   └── model/                     # Data models
 ├── internal/
-│   ├── config/
-│   │   └── config.go              # Configuration loader
-│   ├── models/                    # Database models (Phase 2+)
-│   ├── repositories/              # Data access layer (Phase 2+)
-│   ├── services/                  # Business logic (Phase 2+)
-│   ├── handlers/
-│   │   └── health_handler.go     # HTTP handlers
-│   ├── middleware/
-│   │   ├── logger.go              # Request logging
-│   │   ├── cors.go                # CORS configuration
-│   │   └── error_handler.go      # Error handling
-│   ├── utils/                     # Utility functions (Phase 2+)
-│   └── workers/                   # Background workers (Phase 4+)
+│   ├── config/                    # Configuration loader
+│   ├── middleware/                # HTTP middleware
+│   ├── services/                  # Services (email, etc.)
+│   └── utils/                     # Utilities (JWT, password, etc.)
 ├── pkg/
 │   ├── database/
-│   │   ├── postgres.go            # PostgreSQL connection
-│   │   ├── migrate.go             # Migration runner
+│   │   ├── postgres.go
+│   │   ├── migrate.go
 │   │   └── migrations/            # SQL migration files
-│   ├── cache/
-│   │   └── redis.go               # Redis connection
 │   └── logger/
-│       └── logger.go              # Logger initialization
-├── api/
-│   └── routes/
-│       └── router.go              # Route definitions
-├── tests/                         # Tests (Phase 8)
-├── deployments/
-│   └── docker/
-│       └── docker-compose.yml     # Docker services
-├── config/
-│   └── config.yaml                # Configuration file
-├── .env.example                   # Environment variables template
-├── .gitignore
+│       └── logger.go
+├── commons/                       # Common utilities
+├── deployments/docker/
+│   └── docker-compose.yml         # PostgreSQL service
+├── config/config.yaml
+├── docs/                          # Documentation
+├── .env.example
 ├── go.mod
-├── go.sum
-├── Makefile
 └── README.md
 ```
+
+**See [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md) for detailed architecture**
 
 ## 🎯 Available Endpoints
 
@@ -133,17 +123,16 @@ Response:
 ```json
 {
   "status": "healthy",
-  "timestamp": "2025-01-03T18:00:00Z",
+  "timestamp": "2026-01-10T00:00:00+05:30",
   "checks": {
     "database": {
-      "status": "healthy"
-    },
-    "redis": {
       "status": "healthy"
     }
   }
 }
 ```
+
+**See [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md) for complete API documentation**
 
 ## 🔧 Configuration
 
@@ -155,8 +144,9 @@ Configuration can be set via:
 Key configuration options:
 - `SERVER_PORT`: API server port (default: 8080)
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: PostgreSQL connection
-- `REDIS_HOST`, `REDIS_PORT`: Redis connection
-- `JWT_SECRET`: JWT signing secret (Phase 2)
+- `JWT_SECRET`: JWT signing secret
+- `JWT_ACCESS_TOKEN_EXPIRE`: Access token expiry (default: 24h)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: Email configuration
 - `LOG_LEVEL`: Logging level (debug, info, warn, error)
 
 ## 📝 Makefile Commands
@@ -211,11 +201,12 @@ make docker-logs
 ### Connect to PostgreSQL:
 ```bash
 docker exec -it quiz-craft-postgres psql -U postgres -d quiz_craft
-```
 
-### Connect to Redis:
-```bash
-docker exec -it quiz-craft-redis redis-cli
+# List tables
+\dt
+
+# View users table
+SELECT * FROM users;
 ```
 
 ## 🧪 Testing
@@ -229,11 +220,15 @@ go test -v ./...
 
 ## 🚀 Deployment
 
-See [approach-document.md](approach-document.md) for production deployment guidelines.
+Production deployment guide will be available in Phase 8.
 
-## 📖 API Documentation
+## 📖 Documentation
 
-API documentation will be available via Swagger/OpenAPI in Phase 8.
+- **[CURRENT_STATE.md](docs/CURRENT_STATE.md)** - Current architecture and features
+- **[IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)** - Complete roadmap for all phases
+- **[API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md)** - API endpoint examples
+- **[QUICKSTART.md](docs/QUICKSTART.md)** - Quick start guide
+- **[approach-document.md](docs/approach-document.md)** - Original design document
 
 ## 🤝 Contributing
 
@@ -257,19 +252,34 @@ SERVER_PORT=8081
 ### Database connection failed
 ```bash
 # Make sure PostgreSQL is running
-make docker-up
+docker-compose -f deployments/docker/docker-compose.yml up -d
 
 # Check PostgreSQL logs
 docker logs quiz-craft-postgres
+
+# Verify connection
+docker exec -it quiz-craft-postgres psql -U postgres -d quiz_craft
 ```
 
-### Redis connection failed
+### Migration errors
 ```bash
-# Redis is optional, the application will warn but continue
-# To fix: make sure Redis is running
-make docker-up
+# Check schema_migrations table
+docker exec -it quiz-craft-postgres psql -U postgres -d quiz_craft -c "SELECT * FROM schema_migrations;"
+
+# Reset database (WARNING: deletes all data)
+docker-compose -f deployments/docker/docker-compose.yml down -v
+docker-compose -f deployments/docker/docker-compose.yml up -d
+# Wait 10 seconds, then restart app
 ```
 
 ## 📞 Support
 
-For issues and questions, check the [approach-document.md](approach-document.md) or create an issue in the repository.
+- Check [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md) for architecture details
+- Check [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for roadmap
+- Check [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md) for API examples
+
+## 🎯 What's Next?
+
+We're currently at **Phase 2 Complete**. Ready to implement Phase 3 (Quiz Management)?
+
+See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the complete implementation roadmap!

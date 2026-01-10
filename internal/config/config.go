@@ -12,7 +12,6 @@ import (
 type Config struct {
 	Server      ServerConfig
 	Database    DatabaseConfig
-	Redis       RedisConfig
 	JWT         JWTConfig
 	Email       EmailConfig
 	App         AppConfig
@@ -38,13 +37,6 @@ type DatabaseConfig struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
-}
-
-type RedisConfig struct {
-	Host     string
-	Port     string
-	Password string
-	DB       int
 }
 
 type JWTConfig struct {
@@ -125,11 +117,6 @@ func Load() (*Config, error) {
 	viper.BindEnv("database.max_idle_conns", "DB_MAX_IDLE_CONNS")
 	viper.BindEnv("database.conn_max_lifetime", "DB_CONN_MAX_LIFETIME")
 
-	viper.BindEnv("redis.host", "REDIS_HOST")
-	viper.BindEnv("redis.port", "REDIS_PORT")
-	viper.BindEnv("redis.password", "REDIS_PASSWORD")
-	viper.BindEnv("redis.db", "REDIS_DB")
-
 	viper.BindEnv("jwt.secret", "JWT_SECRET")
 	viper.BindEnv("jwt.access_token_expire", "JWT_ACCESS_TOKEN_EXPIRE")
 	viper.BindEnv("jwt.refresh_token_expire", "JWT_REFRESH_TOKEN_EXPIRE")
@@ -203,11 +190,6 @@ func setDefaults() {
 	viper.SetDefault("database.max_idle_conns", 5)
 	viper.SetDefault("database.conn_max_lifetime", "5m")
 
-	// Redis defaults
-	viper.SetDefault("redis.host", "localhost")
-	viper.SetDefault("redis.port", "6379")
-	viper.SetDefault("redis.db", 0)
-
 	// JWT defaults
 	viper.SetDefault("jwt.access_token_expire", "24h")
 	viper.SetDefault("jwt.refresh_token_expire", "168h")
@@ -251,9 +233,4 @@ func (c *DatabaseConfig) GetDSN() string {
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		c.Host, c.Port, c.User, c.Password, c.Name, c.SSLMode,
 	)
-}
-
-// GetRedisAddr returns the Redis connection address
-func (c *RedisConfig) GetRedisAddr() string {
-	return fmt.Sprintf("%s:%s", c.Host, c.Port)
 }

@@ -14,12 +14,6 @@ database:
   max_idle_conns: 5
   conn_max_lifetime: 5m
 
-redis:
-  host: localhost
-  port: 6379
-  password: ""
-  db: 0
-
 jwt:
   secret: your-secret-key-change-in-production
   access_token_expire: 24h

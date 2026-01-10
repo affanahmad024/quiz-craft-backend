@@ -1,79 +1,80 @@
-# Quick Start Guide - Phase 1
+# Quick Start Guide
 
-## ✅ What We've Built
+Last Updated: January 10, 2026
 
-Phase 1 is complete! You now have:
-- Complete project structure following clean architecture
-- Configuration management (supports .env, YAML, and environment variables)
-- PostgreSQL connection with GORM
-- Redis connection (optional)
-- Database migrations system
-- Middleware (CORS, Logging, Error Handling)
-- Health check endpoints
-- Docker Compose setup for local development
+## ✅ What's Complete
+
+**Phase 1 & 2 Complete!** You have a fully functional authentication system:
+- Clean architecture with PostgreSQL database
+- User registration with email verification
+- JWT-based authentication (access + refresh tokens)
+- Login/Logout with session management
+- Password reset and change functionality
+- 17 authentication & user endpoints
+- Automatic database migrations
+- Docker Compose for development
 
 ## 🚀 How to Run
 
-### Option 1: With Docker (Recommended)
+### Prerequisites
+- Go 1.25.3+
+- Docker Desktop (for PostgreSQL)
+- Git
 
-1. **Start Docker Desktop** (required for PostgreSQL and Redis)
+### Step-by-Step Setup
 
-2. **Start the database services:**
+**1. Navigate to backend directory:**
 ```bash
 cd quiz-craft/backend
+```
+
+**2. Install dependencies:**
+```bash
+go mod download
+```
+
+**3. Copy environment file:**
+```bash
+cp .env.example .env
+```
+
+**4. Edit .env file** with your settings:
+```env
+# Update these values
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+JWT_SECRET=change-this-to-a-random-secret-key
+```
+
+**5. Start PostgreSQL (Docker):**
+```bash
 docker-compose -f deployments/docker/docker-compose.yml up -d
 ```
 
-3. **Wait for services to be ready (about 10 seconds)**
+**6. Wait 10 seconds** for PostgreSQL to be ready
 
-4. **Run the application:**
+**7. Run the application:**
 ```bash
-go run cmd/server/main.go
+go run main.go
 ```
 
-The API will start on `http://localhost:8080`
-
-### Option 2: Without Docker
-
-If you have PostgreSQL and Redis installed locally:
-
-1. **Update .env file** with your local database credentials:
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=your_postgres_user
-DB_PASSWORD=your_postgres_password
-DB_NAME=quiz_craft
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
+You should see:
+```
+INFO[2026-01-10T...] Starting QuizCraft Backend API
+INFO[2026-01-10T...] Environment: development
+INFO[2026-01-10T...] Connecting to PostgreSQL...
+INFO[2026-01-10T...] PostgreSQL connected successfully
+INFO[2026-01-10T...] Running database migrations...
+INFO[2026-01-10T...] Starting servers...
+INFO[2026-01-10T...] Internal server starting on 0.0.0.0:8081
+INFO[2026-01-10T...] External server starting on 0.0.0.0:8080
 ```
 
-2. **Create the database:**
-```sql
-CREATE DATABASE quiz_craft;
-```
-
-3. **Run the application:**
-```bash
-go run cmd/server/main.go
-```
+The API is now running at `http://localhost:8080`
 
 ## 🧪 Testing the API
 
-### 1. Ping Endpoint
-```bash
-curl http://localhost:8080/api/v1/ping
-```
-
-Expected response:
-```json
-{
-  "message": "pong"
-}
-```
-
-### 2. Health Check Endpoint
+### 1. Health Check
 ```bash
 curl http://localhost:8080/api/v1/health
 ```
@@ -82,147 +83,221 @@ Expected response:
 ```json
 {
   "status": "healthy",
-  "timestamp": "2025-01-03T18:00:00Z",
+  "timestamp": "2026-01-10T00:00:00+05:30",
   "checks": {
     "database": {
-      "status": "healthy"
-    },
-    "redis": {
       "status": "healthy"
     }
   }
 }
 ```
 
+### 2. Test User Registration
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "SecurePassword123!",
+    "name": "Test User"
+  }'
+```
+
+Expected response:
+```json
+{
+  "message": "User registered successfully. Please check your email to verify your account."
+}
+```
+
+### 3. Check Email
+You should receive an email verification link (check spam folder if using real email)
+
+**For more API examples, see [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)**
+
 ## 📊 What Happens on Startup
 
-When you run the application, it will:
+When you run `go run main.go`, this happens in order:
 
-1. ✅ Load configuration from `.env` and `config/config.yaml`
-2. ✅ Initialize the logger
-3. ✅ Connect to PostgreSQL
-4. ✅ Run database migrations (creates `users` and `user_passwords` tables)
-5. ✅ Connect to Redis (optional, warns if fails)
-6. ✅ Setup routes and middleware
-7. ✅ Start HTTP server on port 8080
+1. ✅ **Load Configuration** - Reads .env and config.yaml
+2. ✅ **Initialize Logger** - Sets up structured logging
+3. ✅ **Connect to PostgreSQL** - Establishes database connection
+4. ✅ **Run Migrations** - Creates/updates database tables:
+   - `users` table
+   - `user_passwords` table
+   - `schema_migrations` table (tracks migrations)
+5. ✅ **Initialize JWT Manager** - Sets up token signing/validation
+6. ✅ **Initialize DAOs** - Sets up data access layer
+7. ✅ **Initialize Services** - Sets up email service
+8. ✅ **Start HTTP Servers** - Internal (8081) and External (8080)
 
 ## 🗄️ Database Tables Created
 
-After first run, you'll have these tables:
-- `users` - User accounts
-- `user_passwords` - Authentication credentials
-- `schema_migrations` - Migration tracking
+After first run, check your database:
 
-You can verify:
 ```bash
 # Connect to PostgreSQL
 docker exec -it quiz-craft-postgres psql -U postgres -d quiz_craft
 
 # List tables
 \dt
-
-# View users table structure
-\d users
 ```
+
+You should see:
+- `users` - User accounts (email, name, etc.)
+- `user_passwords` - Authentication data (password hashes, tokens, 2FA)
+- `schema_migrations` - Migration version tracking
 
 ## 🐛 Troubleshooting
 
 ### "Failed to connect to database"
-- Make sure Docker Desktop is running
-- Check if containers are up: `docker ps`
-- View logs: `docker logs quiz-craft-postgres`
+```bash
+# Check if PostgreSQL container is running
+docker ps
+
+# Should see: quiz-craft-postgres
+
+# If not running, start it
+docker-compose -f deployments/docker/docker-compose.yml up -d
+
+# Check logs
+docker logs quiz-craft-postgres
+```
 
 ### "Port 8080 already in use"
-- Change `SERVER_PORT` in `.env` file
-- Or stop the process using port 8080
+```bash
+# Option 1: Change port in .env
+SERVER_PORT=8081
 
-### "Failed to connect to Redis"
-- This is optional, the app will continue without Redis
-- To fix: Make sure Redis container is running
-- Check: `docker logs quiz-craft-redis`
+# Option 2: Find and kill process using port 8080
+# Windows:
+netstat -ano | findstr :8080
+taskkill /PID <PID> /F
 
-## 📁 Project Structure Overview
+# Linux/Mac:
+lsof -ti:8080 | xargs kill -9
+```
+
+### "Migration failed"
+```bash
+# Check current migration version
+docker exec -it quiz-craft-postgres psql -U postgres -d quiz_craft -c "SELECT * FROM schema_migrations;"
+
+# If corrupted, reset database (WARNING: deletes all data)
+docker-compose -f deployments/docker/docker-compose.yml down -v
+docker-compose -f deployments/docker/docker-compose.yml up -d
+# Wait 10 seconds, then restart app
+```
+
+### "SMTP connection failed"
+Email sending will fail, but app will continue running. To fix:
+1. Use Gmail with App Password (not regular password)
+2. Enable 2-factor authentication on Gmail
+3. Generate App Password: https://myaccount.google.com/apppasswords
+4. Update `SMTP_PASSWORD` in .env with the app password
+
+## 📁 Project Structure
 
 ```
 backend/
-├── cmd/server/main.go           # Application entry point
+├── main.go                    # Entry point
+├── api/                       # HTTP handlers
+│   ├── auth.go               # Auth endpoints
+│   └── user.go               # User endpoints
+├── auth/core/                # Auth business logic
+├── user/
+│   ├── dao/                  # Database operations
+│   └── model/                # Data models
 ├── internal/
-│   ├── config/config.go         # Configuration loader
-│   ├── handlers/                # HTTP request handlers
-│   │   └── health_handler.go
-│   └── middleware/              # HTTP middleware
-│       ├── logger.go            # Request logging
-│       ├── cors.go              # CORS configuration
-│       └── error_handler.go    # Error handling
+│   ├── config/               # Configuration
+│   ├── middleware/           # HTTP middleware
+│   ├── services/             # Services (email, etc.)
+│   └── utils/                # Utilities (JWT, password)
 ├── pkg/
-│   ├── database/                # Database connection & migrations
-│   │   ├── postgres.go
-│   │   ├── migrate.go
-│   │   └── migrations/          # SQL migration files
-│   ├── cache/redis.go           # Redis connection
-│   └── logger/logger.go         # Logger setup
-├── api/routes/router.go         # Route definitions
-├── .env                         # Environment variables
-└── config/config.yaml           # Configuration file
+│   ├── database/
+│   │   └── migrations/       # SQL migration files
+│   └── logger/
+├── .env                      # Your configuration
+└── config/config.yaml        # Default config
 ```
 
-## 🎯 Next Steps (Phase 2)
+## 📚 Available Endpoints
 
-Phase 1 is complete! Next, we'll implement:
-- User registration and signup
-- Email verification
-- Login with JWT authentication
-- Password reset
-- User profile management
+### Public (No Auth Required)
+- `POST /api/v1/auth/signup` - Register new user
+- `POST /api/v1/auth/login` - Login with credentials
+- `POST /api/v1/auth/verify-email` - Verify email with token
+- `POST /api/v1/auth/resend-verification` - Resend verification email
+- `POST /api/v1/auth/forgot-password` - Request password reset
+- `POST /api/v1/auth/reset-password` - Reset password with token
+- `POST /api/v1/auth/refresh` - Refresh access token
+
+### Protected (Requires JWT Token)
+- `POST /api/v1/auth/logout` - Logout current session
+- `POST /api/v1/auth/change-password` - Change password
+- `GET /api/v1/users/me` - Get current user profile
+- `PATCH /api/v1/users/me` - Update profile
+- `DELETE /api/v1/users/me` - Soft delete account
+- `GET /api/v1/users` - List all users (admin)
+- `GET /api/v1/users/:id` - Get user by ID (admin)
+- `POST /api/v1/users/:id/restore` - Restore deleted user (admin)
+- `POST /api/v1/users/:id/disable` - Disable user (admin)
+- `POST /api/v1/users/:id/enable` - Enable user (admin)
+
+**For detailed API examples, see [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)**
 
 ## 💡 Tips
 
-1. **View logs**: All logs are printed to console with structured format
-2. **Hot reload**: Install `air` for automatic reloading during development:
+1. **Use a REST client** like Postman or Insomnia for easier API testing
+2. **Install air** for hot reload during development:
    ```bash
    go install github.com/air-verse/air@latest
    air
    ```
-3. **Database GUI**: Use pgAdmin or DBeaver to visualize the database
-4. **Redis GUI**: Use RedisInsight to view Redis data
-
-## 🔧 Useful Commands
-
-```bash
-# Build the application
-go build -o bin/server.exe cmd/server/main.go
-
-# Run the application
-go run cmd/server/main.go
-
-# Start Docker services
-docker-compose -f deployments/docker/docker-compose.yml up -d
-
-# Stop Docker services
-docker-compose -f deployments/docker/docker-compose.yml down
-
-# View Docker logs
-docker-compose -f deployments/docker/docker-compose.yml logs -f
-
-# Clean up (remove volumes)
-docker-compose -f deployments/docker/docker-compose.yml down -v
-
-# Format code
-go fmt ./...
-
-# Install dependencies
-go mod download
-go mod tidy
-```
+3. **Use a database GUI** like pgAdmin or DBeaver to visualize data
+4. **Check logs** - All application logs print to console
 
 ## ✅ Verification Checklist
 
+Before moving to Phase 3, verify:
 - [ ] Docker Desktop is running
 - [ ] PostgreSQL container is running (`docker ps`)
-- [ ] Redis container is running (`docker ps`)
 - [ ] Application starts without errors
-- [ ] `/api/v1/ping` returns "pong"
-- [ ] `/api/v1/health` shows all services healthy
+- [ ] Health check returns HTTP 200
+- [ ] Can register a new user
 - [ ] Database tables are created (users, user_passwords)
+- [ ] Can login with correct credentials
+- [ ] JWT tokens are returned on login
 
-If all checks pass, Phase 1 is successfully set up! 🎉
+If all checks pass, you're ready for Phase 3! 🎉
+
+## 🎯 What's Next?
+
+Phase 1 & 2 are complete! Ready to build quiz management features?
+
+**See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for Phase 3 roadmap**
+
+Phase 3 will add:
+- Quiz creation and management
+- Question and answer management
+- Quiz publishing and sharing
+- Category and tag system
+
+Estimated time: 3-5 days
+
+## 📖 More Documentation
+
+- **[CURRENT_STATE.md](CURRENT_STATE.md)** - Complete architecture overview
+- **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** - Full roadmap (Phases 3-8)
+- **[API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)** - API examples and testing
+- **[../README.md](../README.md)** - Main project README
+
+## 🆘 Need Help?
+
+1. Check [CURRENT_STATE.md](CURRENT_STATE.md) for architecture details
+2. Check [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md) for API examples
+3. Check Docker logs: `docker logs quiz-craft-postgres`
+4. Check application logs in your terminal
+5. Verify .env configuration
+
+Happy coding! 🚀

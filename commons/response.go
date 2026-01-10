@@ -58,6 +58,15 @@ func Resp401(c *gin.Context, errMsg string) {
 	})
 }
 
+// Resp403 sends 403 Forbidden
+func Resp403(c *gin.Context, errMsg string) {
+	c.JSON(http.StatusForbidden, APIResponse{
+		Success: false,
+		Message: "Forbidden",
+		Error:   errMsg,
+	})
+}
+
 // Resp404 sends 404 Not Found
 func Resp404(c *gin.Context, errMsg string) {
 	c.JSON(http.StatusNotFound, APIResponse{

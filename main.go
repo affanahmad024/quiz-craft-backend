@@ -17,13 +17,13 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/internal/middleware"
 	"github.com/affanahmad024/quiz-craft/backend/internal/services"
 	"github.com/affanahmad024/quiz-craft/backend/internal/utils"
-	"github.com/affanahmad024/quiz-craft/backend/pkg/cache"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/database"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
 	"github.com/affanahmad024/quiz-craft/backend/api"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	authcore "github.com/affanahmad024/quiz-craft/backend/auth/core"
 	userdao "github.com/affanahmad024/quiz-craft/backend/user/dao"
+	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 )
 
 var (
@@ -69,15 +69,6 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Initialize Redis
-	log.Info("Connecting to Redis...")
-	if err := cache.InitRedis(&cfg.Redis); err != nil {
-		log.Warnf("Failed to initialize Redis: %v", err)
-		log.Warn("Continuing without Redis (some features may not work)")
-	} else {
-		defer cache.Close()
-	}
-
 	// Initialize JWT Manager
 	jwtManager = utils.NewJWTManager(
 		cfg.JWT.Secret,
@@ -87,6 +78,7 @@ func main() {
 
 	// Initialize DAOs
 	userdao.Init(sqlDB)
+	quizdao.Init(sqlDB)
 
 	// Initialize Auth Core with dependencies
 	emailService := services.NewEmailService(&cfg.Email)
@@ -176,6 +168,33 @@ func initExt() {
 		users.POST("/:id/enable", api.EnableUser)
 	}
 
+	// Quiz endpoints (protected)
+	quizzes := v1.Group("/quizzes")
+	quizzes.Use(middleware.Auth(jwtManager))
+	{
+		// Quiz CRUD
+		quizzes.POST("", api.CreateQuiz)                    // Create quiz
+		quizzes.GET("", api.ListMyQuizzes)                  // List my quizzes
+		quizzes.GET("/public", api.ListPublicQuizzes)       // List public quizzes
+		quizzes.GET("/:id", api.GetQuiz)                    // Get quiz by ID
+		quizzes.GET("/:id/full", api.GetQuizWithQuestions)  // Get quiz with questions
+		quizzes.PATCH("/:id", api.UpdateQuiz)               // Update quiz
+		quizzes.DELETE("/:id", api.DeleteQuiz)              // Delete quiz
+		quizzes.POST("/:id/publish", api.PublishQuiz)       // Publish quiz
+		quizzes.POST("/:id/unpublish", api.UnpublishQuiz)   // Unpublish quiz
+
+		// Question CRUD
+		quizzes.POST("/:id/questions", api.AddQuestion)           // Add question to quiz
+		quizzes.GET("/questions/:qid", api.GetQuestion)           // Get question by ID
+		quizzes.PATCH("/questions/:qid", api.UpdateQuestion)      // Update question
+		quizzes.DELETE("/questions/:qid", api.DeleteQuestion)     // Delete question
+
+		// Answer CRUD
+		quizzes.POST("/questions/:qid/answers", api.AddAnswer)    // Add answer to question
+		quizzes.PATCH("/answers/:aid", api.UpdateAnswer)          // Update answer
+		quizzes.DELETE("/answers/:aid", api.DeleteAnswer)         // Delete answer
+	}
+
 	// Create HTTP server
 	extAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	extServer := &http.Server{
@@ -235,17 +254,6 @@ func HealthCheck(c *gin.Context) {
 		dbHealthy = false
 	}
 
-	// Check Redis
-	redisHealthy := true
-	redisClient := cache.GetRedis()
-	if redisClient != nil {
-		if err := redisClient.Ping(context.Background()).Err(); err != nil {
-			redisHealthy = false
-		}
-	} else {
-		redisHealthy = false
-	}
-
 	status := "healthy"
 	statusCode := http.StatusOK
 	if !dbHealthy {
@@ -259,9 +267,6 @@ func HealthCheck(c *gin.Context) {
 		"checks": gin.H{
 			"database": gin.H{
 				"status": map[bool]string{true: "healthy", false: "unhealthy"}[dbHealthy],
-			},
-			"redis": gin.H{
-				"status": map[bool]string{true: "healthy", false: "unhealthy"}[redisHealthy],
 			},
 		},
 	})

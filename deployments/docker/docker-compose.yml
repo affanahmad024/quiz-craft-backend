@@ -20,21 +20,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: quiz-craft-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Go Backend (optional - for containerized development)
   # backend:
   #   build:
@@ -50,12 +35,8 @@ services:
   #     - DB_USER=postgres
   #     - DB_PASSWORD=postgres
   #     - DB_NAME=quiz_craft
-  #     - REDIS_HOST=redis
-  #     - REDIS_PORT=6379
   #   depends_on:
   #     postgres:
-  #       condition: service_healthy
-  #     redis:
   #       condition: service_healthy
   #   volumes:
   #     - ../..:/app
@@ -63,4 +44,3 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
