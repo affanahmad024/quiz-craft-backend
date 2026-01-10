@@ -12,18 +12,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	
+
+	aiagentdao "github.com/affanahmad024/quiz-craft/backend/ai-agent/dao"
+	aiworker "github.com/affanahmad024/quiz-craft/backend/ai-agent/worker"
+	"github.com/affanahmad024/quiz-craft/backend/api"
+	authcore "github.com/affanahmad024/quiz-craft/backend/auth/core"
+	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/internal/config"
 	"github.com/affanahmad024/quiz-craft/backend/internal/middleware"
 	"github.com/affanahmad024/quiz-craft/backend/internal/services"
 	"github.com/affanahmad024/quiz-craft/backend/internal/utils"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/database"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
-	"github.com/affanahmad024/quiz-craft/backend/api"
-	"github.com/affanahmad024/quiz-craft/backend/commons"
-	authcore "github.com/affanahmad024/quiz-craft/backend/auth/core"
-	userdao "github.com/affanahmad024/quiz-craft/backend/user/dao"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
+	userdao "github.com/affanahmad024/quiz-craft/backend/user/dao"
 )
 
 var (
@@ -79,12 +81,18 @@ func main() {
 	// Initialize DAOs
 	userdao.Init(sqlDB)
 	quizdao.Init(sqlDB)
+	aiagentdao.InitFileDAO(sqlDB)
+	aiagentdao.InitJobDAO(sqlDB)
 
 	// Initialize Auth Core with dependencies
 	emailService := services.NewEmailService(&cfg.Email)
 	authcore.Init(jwtManager, emailService)
 
 	log.Info("Starting servers...")
+	// Start background worker for AI quiz generation
+	worker := aiworker.NewQuizGeneratorWorker(sqlDB)
+	go worker.Start(context.Background())
+	log.Info("Background worker started for quiz generation")
 
 	// Start internal and external servers
 	go initInt()
@@ -194,6 +202,25 @@ func initExt() {
 		quizzes.PATCH("/answers/:aid", api.UpdateAnswer)          // Update answer
 		quizzes.DELETE("/answers/:aid", api.DeleteAnswer)         // Delete answer
 	}
+	// File upload endpoints (protected)
+	files := v1.Group("/files")
+	files.Use(middleware.Auth(jwtManager))
+	{
+		files.POST("/upload", api.UploadFile)        // Upload file
+		files.GET("", api.ListFiles)                 // List user files
+		files.DELETE("/:id", api.DeleteFile)         // Delete file
+	}
+
+	// AI generation endpoints (protected)
+	aiGroup := v1.Group("/ai")
+	aiGroup.Use(middleware.Auth(jwtManager))
+	{
+		aiGroup.POST("/generate-quiz-from-text", api.GenerateQuizFromText)  // Generate from text
+		aiGroup.POST("/generate-quiz-from-file", api.GenerateQuizFromFile)  // Generate from file
+		aiGroup.GET("/generation-status/:id", api.GetGenerationStatus)      // Check status
+		aiGroup.GET("/jobs", api.ListJobs)                                  // List jobs
+	}
+	
 
 	// Create HTTP server
 	extAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)

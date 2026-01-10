@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_quizzes_category ON quizzes(category) WHERE delet
 CREATE INDEX IF NOT EXISTS idx_quizzes_difficulty ON quizzes(difficulty) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_quizzes_is_published ON quizzes(is_published) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_quizzes_is_public ON quizzes(is_public) WHERE deleted_at IS NULL AND is_published = true;
-CREATE INDEX IF NOT EXISTS idx_quizzes_tags USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_quizzes_tags ON quizzes USING GIN(tags);
 CREATE INDEX IF NOT EXISTS idx_quizzes_created_at ON quizzes(created_at DESC) WHERE deleted_at IS NULL;
 
 -- Trigger to automatically update updated_at timestamp
