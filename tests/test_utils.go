@@ -20,10 +20,10 @@ var TestDB *sql.DB
 func SetupTestDB(t *testing.T) {
 	cfg := &config.DatabaseConfig{
 		Host:            "localhost",
-		Port:            5432,
+		Port:            "5432",
 		User:            "postgres",
 		Password:        "postgres",
-		DBName:          "quiz_craft_test",
+		Name:            "quiz_craft_test",
 		SSLMode:         "disable",
 		MaxOpenConns:    10,
 		MaxIdleConns:    5,
