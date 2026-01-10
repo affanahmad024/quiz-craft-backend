@@ -25,6 +25,7 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/pkg/database"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
+	quizworker "github.com/affanahmad024/quiz-craft/backend/quiz/worker"
 	userdao "github.com/affanahmad024/quiz-craft/backend/user/dao"
 )
 
@@ -90,9 +91,14 @@ func main() {
 
 	log.Info("Starting servers...")
 	// Start background worker for AI quiz generation
-	worker := aiworker.NewQuizGeneratorWorker(sqlDB)
-	go worker.Start(context.Background())
+	aiWorker := aiworker.NewQuizGeneratorWorker(sqlDB)
+	go aiWorker.Start(context.Background())
 	log.Info("Background worker started for quiz generation")
+
+	// Start background worker for attempt auto-submit
+	attemptWorker := quizworker.NewAttemptWorker()
+	go attemptWorker.Start(context.Background())
+	log.Info("Background worker started for attempt auto-submit")
 
 	// Start internal and external servers
 	go initInt()
@@ -220,7 +226,22 @@ func initExt() {
 		aiGroup.GET("/generation-status/:id", api.GetGenerationStatus)      // Check status
 		aiGroup.GET("/jobs", api.ListJobs)                                  // List jobs
 	}
-	
+
+	// Attempt endpoints (protected)
+	attempts := v1.Group("/attempts")
+	attempts.Use(middleware.Auth(jwtManager))
+	{
+		attempts.GET("", api.ListMyAttempts)                    // List my attempts
+		attempts.GET("/:id", api.GetAttempt)                    // Get attempt by ID
+		attempts.GET("/:id/results", api.GetAttemptResult)      // Get attempt result
+		attempts.POST("/:id/answers", api.SubmitAnswer)         // Submit answer
+		attempts.POST("/:id/finish", api.FinishAttempt)         // Finish attempt
+	}
+
+	// Add attempt routes to quizzes group
+	quizzes.POST("/:id/attempts", api.StartAttempt)            // Start quiz attempt
+	quizzes.GET("/:id/stats", api.GetQuizStats)                // Get quiz stats (creator only)
+
 
 	// Create HTTP server
 	extAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
