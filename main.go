@@ -163,6 +163,7 @@ func initExt() {
 	r.Use(gin.Recovery())
 	r.Use(TraceIDMiddleware())
 	r.Use(gin.Logger())
+	r.Use(middleware.CORS(&cfg.CORS)) // Enable CORS for frontend
 
 	v1 := r.Group("/api/v1")
 
