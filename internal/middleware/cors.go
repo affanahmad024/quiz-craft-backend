@@ -22,6 +22,10 @@ func CORS(cfg *config.CORSConfig) gin.HandlerFunc {
 		})
 	}
 
+	log.Printf("✅ CORS configured with origins: %v", cfg.AllowedOrigins)
+	log.Printf("✅ CORS methods: %v", cfg.AllowedMethods)
+	log.Printf("✅ CORS headers: %v", cfg.AllowedHeaders)
+
 	return cors.New(cors.Config{
 		AllowOrigins:     cfg.AllowedOrigins,
 		AllowMethods:     cfg.AllowedMethods,

@@ -46,6 +46,7 @@ cors:
   allowed_headers:
     - Content-Type
     - Authorization
+    - X-Application-Name
 
 rate_limit:
   requests: 100
