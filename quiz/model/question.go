@@ -17,6 +17,10 @@ type Question struct {
 	Meta         JSONMap   `json:"meta,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+
+	// Answers can be either []Answer (with is_correct) or []AnswerListItem (without is_correct)
+	// This field is populated dynamically and not stored in DB
+	Answers interface{} `json:"answers,omitempty"`
 }
 
 // QuestionWithAnswers represents a question with all its answers

@@ -111,8 +111,8 @@ func GetQuizWithQuestions(ctx context.Context, quizID string, userID string, hid
 				commons.LogE(ctx, "[core.GetQuizWithQuestions::ListAnswersErr [question_id=%s [err=%v", question.ID, err)
 				continue
 			}
-			// Convert AnswerListItem to Answer for consistency
-			// Note: is_correct will be false for all
+			// Attach answers without is_correct field
+			question.Answers = answerItems
 			question.Meta = model.JSONMap{"answer_count": len(answerItems)}
 		} else {
 			// For quiz creators/editors - show correct answers
@@ -121,6 +121,12 @@ func GetQuizWithQuestions(ctx context.Context, quizID string, userID string, hid
 				commons.LogE(ctx, "[core.GetQuizWithQuestions::ListAnswersErr [question_id=%s [err=%v", question.ID, err)
 				continue
 			}
+			// Convert []*Answer to []Answer for JSON serialization
+			answerList := []model.Answer{}
+			for _, ans := range answers {
+				answerList = append(answerList, *ans)
+			}
+			question.Answers = answerList
 			question.Meta = model.JSONMap{"answer_count": len(answers)}
 		}
 
