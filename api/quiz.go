@@ -471,6 +471,60 @@ func AddQuestion(c *gin.Context) {
 	commons.RespOKWithMsg(c, "Question added successfully", question)
 }
 
+// AddQuestionsBulk adds multiple questions to a quiz
+func AddQuestionsBulk(c *gin.Context) {
+	st := time.Now()
+	ctx := commons.Ctx(c)
+	tid := commons.Tid(ctx)
+	c.Set(commons.TidRespHdr, tid)
+	ip := c.ClientIP()
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	quizID := c.Param("id")
+
+	var req model.BulkQuestionsInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.LogW(ctx, "[api.AddQuestionsBulk::BindErr [quiz_id=%s [err=%v", quizID, err)
+		commons.RespBadReq(c, "invalid-request-body")
+		return
+	}
+
+	commons.Log(ctx, "[api.AddQuestionsBulk [user_id=%s [quiz_id=%s [count=%d", userID, quizID, len(req.Questions))
+
+	questions, err := core.AddQuestionsBulk(ctx, quizID, userID.String(), req)
+	if err != nil {
+		commons.LogC(ctx, "[api.AddQuestionsBulk::KO [time_taken=%v [ip=%s [quiz_id=%s [err=%v",
+			time.Since(st), ip, quizID, err)
+
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, commons.GetCode(err))
+			return
+		}
+		if commons.IsForbidden(err) {
+			commons.Resp403(c, commons.GetCode(err))
+			return
+		}
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	commons.Log(ctx, "[api.AddQuestionsBulk::OK [time_taken=%v [ip=%s [count=%d",
+		time.Since(st), ip, len(questions))
+	commons.RespOKWithMsg(c, "Questions added successfully", gin.H{
+		"questions": questions,
+		"count":     len(questions),
+	})
+}
+
 // GetQuestion retrieves a question with answers
 func GetQuestion(c *gin.Context) {
 	st := time.Now()

@@ -110,6 +110,11 @@ type QuestionInput struct {
 	Answers      []AnswerInput `json:"answers,omitempty"` // Optional answers to create with question
 }
 
+// BulkQuestionsInput represents input for creating multiple questions at once
+type BulkQuestionsInput struct {
+	Questions []QuestionInput `json:"questions" binding:"required,min=1"`
+}
+
 // QuestionUpdateInput represents input for updating a question
 type QuestionUpdateInput struct {
 	QuestionText string  `json:"question_text,omitempty"`

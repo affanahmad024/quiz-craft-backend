@@ -256,3 +256,54 @@ func ReorderQuestions(ctx context.Context, updates []model.QuestionReorder) erro
 	commons.Log(ctx, "[dao.ReorderQuestions::OK [count=%d", len(updates))
 	return nil
 }
+
+// CreateQuestionsBulk creates multiple questions in a transaction
+func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error {
+	commons.Log(ctx, "[dao.CreateQuestionsBulk [count=%d", len(questions))
+
+	if len(questions) == 0 {
+		return nil
+	}
+
+	// Start transaction
+	tx, err := db.Begin()
+	if err != nil {
+		commons.LogE(ctx, "[dao.CreateQuestionsBulk::TxErr [err=%v", err)
+		return err
+	}
+	defer tx.Rollback()
+
+	qry := `INSERT INTO questions (
+				id, quiz_id, question_text, question_type, points, order_index,
+				explanation, meta, created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+			) RETURNING created_at, updated_at`
+
+	for _, question := range questions {
+		metaJSON, _ := json.Marshal(question.Meta)
+		err := tx.QueryRowContext(ctx, qry,
+			question.ID,
+			question.QuizID,
+			question.QuestionText,
+			question.QuestionType,
+			question.Points,
+			question.OrderIndex,
+			question.Explanation,
+			metaJSON,
+		).Scan(&question.CreatedAt, &question.UpdatedAt)
+
+		if err != nil {
+			commons.LogE(ctx, "[dao.CreateQuestionsBulk::InsertErr [question_id=%s [err=%v", question.ID, err)
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		commons.LogE(ctx, "[dao.CreateQuestionsBulk::CommitErr [err=%v", err)
+		return err
+	}
+
+	commons.Log(ctx, "[dao.CreateQuestionsBulk::OK [count=%d", len(questions))
+	return nil
+}

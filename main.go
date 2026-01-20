@@ -221,10 +221,11 @@ func initExt() {
 		quizzes.POST("/:id/unpublish", api.UnpublishQuiz)  // Unpublish quiz
 
 		// Question CRUD
-		quizzes.POST("/:id/questions", api.AddQuestion)       // Add question to quiz
-		quizzes.GET("/questions/:qid", api.GetQuestion)       // Get question by ID
-		quizzes.PATCH("/questions/:qid", api.UpdateQuestion)  // Update question
-		quizzes.DELETE("/questions/:qid", api.DeleteQuestion) // Delete question
+		quizzes.POST("/:id/questions", api.AddQuestion)           // Add question to quiz
+		quizzes.POST("/:id/questions/bulk", api.AddQuestionsBulk) // Add multiple questions to quiz
+		quizzes.GET("/questions/:qid", api.GetQuestion)           // Get question by ID
+		quizzes.PATCH("/questions/:qid", api.UpdateQuestion)      // Update question
+		quizzes.DELETE("/questions/:qid", api.DeleteQuestion)     // Delete question
 
 		// Answer CRUD
 		quizzes.POST("/questions/:qid/answers", api.AddAnswer) // Add answer to question
