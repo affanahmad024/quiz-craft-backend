@@ -82,7 +82,8 @@ Access tokens expire after a set period. Use refresh token to get new access tok
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| POST | `/quizzes/:id/questions` | Add question to quiz | Yes (Creator) |
+| POST | `/quizzes/:id/questions` | Add question to quiz (with optional answers) | Yes (Creator) |
+| POST | `/quizzes/:id/questions/bulk` | Add multiple questions at once | Yes (Creator) |
 | GET | `/quizzes/questions/:qid` | Get question by ID | Yes |
 | PATCH | `/quizzes/questions/:qid` | Update question | Yes (Creator) |
 | DELETE | `/quizzes/questions/:qid` | Delete question | Yes (Creator) |
@@ -152,9 +153,16 @@ All admin endpoints require **admin role**.
 | GET | `/admin/users` | List all users | Yes (Admin) |
 | GET | `/admin/users/:id` | Get user details | Yes (Admin) |
 | PATCH | `/admin/users/:id/role` | Change user role | Yes (Admin) |
-| POST | `/admin/users/:id/disable` | Disable user | Yes (Admin) |
-| POST | `/admin/users/:id/enable` | Enable user | Yes (Admin) |
-| DELETE | `/admin/users/:id` | Delete user | Yes (Admin) |
+| POST | `/admin/users/:id/disable` | Disable user account | Yes (Admin) |
+| POST | `/admin/users/:id/enable` | Enable user account | Yes (Admin) |
+| POST | `/admin/users/:id/restore` | Restore deleted user | Yes (Admin) |
+| DELETE | `/admin/users/:id` | Delete user permanently | Yes (Admin) |
+
+**Security Notes:**
+- User enable/disable/restore endpoints are **admin-only**
+- Previously these routes existed in `/users/:id/disable` which was a security issue (fixed)
+- Admins cannot disable/delete themselves
+- All admin actions are logged in activity logs
 
 #### Quiz Moderation
 
@@ -268,6 +276,115 @@ curl -X POST http://localhost:8080/api/v1/quizzes \
 }
 ```
 
+### List My Quizzes
+
+Lists all quizzes created by the authenticated user, including latest attempt information.
+
+**Request:**
+```bash
+curl -X GET "http://localhost:8080/api/v1/quizzes?page=1&limit=20" \
+  -H "Authorization: Bearer {access_token}"
+```
+
+**Response:**
+```json
+{
+  "message": "Quizzes retrieved successfully",
+  "data": {
+    "quizzes": [
+      {
+        "id": "quiz-123",
+        "title": "JavaScript Basics",
+        "description": "Test your JS knowledge",
+        "category": "Programming",
+        "difficulty": "medium",
+        "is_published": true,
+        "is_public": true,
+        "created_at": "2026-01-10T12:00:00Z",
+        "latest_attempt": {
+          "attempt_id": "attempt-456",
+          "status": "submitted",
+          "started_at": "2026-01-20T10:00:00Z",
+          "submitted_at": "2026-01-20T10:15:00Z",
+          "score": 85.0,
+          "max_score": 100,
+          "percentage": 85.0,
+          "passed": true
+        }
+      }
+    ],
+    "total": 15,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+**Features:**
+- Shows your latest attempt on each quiz (score, status, timestamps)
+- If no attempt exists, `latest_attempt` field is omitted
+- Useful for tracking which quizzes you've taken and your scores
+
+### List Public Quizzes
+
+Lists all public published quizzes, including your latest attempts if you're authenticated.
+
+**Request:**
+```bash
+curl -X GET "http://localhost:8080/api/v1/quizzes/public?category=Programming&difficulty=medium" \
+  -H "Authorization: Bearer {access_token}"
+```
+
+**Response:**
+```json
+{
+  "message": "Public quizzes retrieved successfully",
+  "data": {
+    "quizzes": [
+      {
+        "id": "quiz-789",
+        "title": "Python Advanced",
+        "description": "Advanced Python concepts",
+        "creator_id": "other-user-id",
+        "category": "Programming",
+        "difficulty": "hard",
+        "is_published": true,
+        "is_public": true,
+        "created_at": "2026-01-15T14:00:00Z",
+        "latest_attempt": {
+          "attempt_id": "attempt-999",
+          "status": "submitted",
+          "started_at": "2026-01-19T09:00:00Z",
+          "submitted_at": "2026-01-19T09:45:00Z",
+          "score": 72.0,
+          "max_score": 100,
+          "percentage": 72.0,
+          "passed": true
+        }
+      },
+      {
+        "id": "quiz-321",
+        "title": "React Fundamentals",
+        "description": "Learn React basics",
+        "creator_id": "another-user-id",
+        "is_published": true,
+        "is_public": true
+        // No latest_attempt = you haven't taken this quiz yet
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+**Features:**
+- Shows all public quizzes from all users
+- Includes your attempt history on each quiz
+- Helps you decide which quizzes to take or retake
+- Filter by category, difficulty, search terms
+
 ### Add Question
 
 **Request:**
@@ -305,6 +422,76 @@ curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions \
     ]
   }'
 ```
+
+### Add Multiple Questions (Bulk)
+
+Add multiple questions with answers in a single API call. All questions are created in an atomic transaction.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions/bulk \
+  -H "Authorization: Bearer {access_token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "questions": [
+      {
+        "question_text": "What is 2+2?",
+        "question_type": "multiple_choice",
+        "points": 10,
+        "explanation": "Basic arithmetic",
+        "answers": [
+          {"answer_text": "3", "is_correct": false},
+          {"answer_text": "4", "is_correct": true},
+          {"answer_text": "5", "is_correct": false}
+        ]
+      },
+      {
+        "question_text": "What is the capital of France?",
+        "question_type": "multiple_choice",
+        "points": 10,
+        "answers": [
+          {"answer_text": "London", "is_correct": false},
+          {"answer_text": "Paris", "is_correct": true},
+          {"answer_text": "Berlin", "is_correct": false}
+        ]
+      }
+    ]
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Questions added successfully",
+  "data": {
+    "questions": [
+      {
+        "id": "q1-uuid",
+        "quiz_id": "quiz-uuid",
+        "question_text": "What is 2+2?",
+        "question_type": "multiple_choice",
+        "points": 10,
+        "order_index": 0
+      },
+      {
+        "id": "q2-uuid",
+        "quiz_id": "quiz-uuid",
+        "question_text": "What is the capital of France?",
+        "question_type": "multiple_choice",
+        "points": 10,
+        "order_index": 1
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+**Features:**
+- All-or-nothing transaction: If one question fails, none are created
+- Automatic order indexing
+- Each question can include its answers
+- Validates all questions and answers before creating
 
 ### Start Quiz Attempt
 

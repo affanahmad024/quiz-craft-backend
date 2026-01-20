@@ -88,12 +88,32 @@ All 8 phases completed and production-ready!
 
 ## 📊 Implementation Statistics
 
-- **64 REST API Endpoints** fully implemented
+- **66 REST API Endpoints** fully implemented
 - **14 Database Tables** with optimized schemas
 - **69 Unit Tests** (auth, scoring, validation, statistics)
 - **70+ Manual Test Scenarios**
-- **2,144 lines** of API integration documentation
+- **2,200+ lines** of API integration documentation
 - **100% Phase Completion** (8/8 phases)
+
+## 🎯 Recent Enhancements
+
+### Bulk Question Creation (Jan 2026)
+- Add multiple questions with answers in a single API call
+- Atomic transaction ensures all-or-nothing creation
+- Automatic order indexing for questions
+- Full validation before database insertion
+
+### Enhanced Quiz Listings (Jan 2026)
+- Quiz listings now include **latest attempt information**
+- See your score, status, and timestamps on each quiz
+- Works for both "My Quizzes" and "Public Quizzes"
+- Helps users track progress and decide which quizzes to retake
+
+### Admin Security Fixes (Jan 2026)
+- Fixed security vulnerability in user management endpoints
+- User enable/disable/restore now **admin-only**
+- Removed insecure routes from general user endpoints
+- Added proper authorization checks and activity logging
 
 ## 📋 Prerequisites
 
@@ -232,8 +252,9 @@ backend/
 - `POST /api/v1/quizzes/:id/publish` - Publish quiz
 - `POST /api/v1/quizzes/:id/unpublish` - Unpublish quiz
 
-### Questions & Answers (7 endpoints)
-- `POST /api/v1/quizzes/:id/questions` - Add question
+### Questions & Answers (8 endpoints)
+- `POST /api/v1/quizzes/:id/questions` - Add question (with optional answers)
+- `POST /api/v1/quizzes/:id/questions/bulk` - Add multiple questions at once 🆕
 - `GET /api/v1/quizzes/questions/:qid` - Get question
 - `PATCH /api/v1/quizzes/questions/:qid` - Update question
 - `DELETE /api/v1/quizzes/questions/:qid` - Delete question
@@ -267,13 +288,14 @@ backend/
 ### Sharing (1 endpoint)
 - `POST /api/v1/quizzes/:id/share` - Generate share link
 
-### Admin (12 endpoints)
+### Admin (13 endpoints)
 - `GET /api/v1/admin/users` - List all users
 - `GET /api/v1/admin/users/:id` - Get user details
 - `PATCH /api/v1/admin/users/:id/role` - Change user role
 - `POST /api/v1/admin/users/:id/disable` - Disable user
 - `POST /api/v1/admin/users/:id/enable` - Enable user
-- `DELETE /api/v1/admin/users/:id` - Delete user
+- `POST /api/v1/admin/users/:id/restore` - Restore deleted user 🆕
+- `DELETE /api/v1/admin/users/:id` - Delete user permanently
 - `GET /api/v1/admin/quizzes` - List all quizzes
 - `GET /api/v1/admin/quizzes/:id` - Get quiz details
 - `DELETE /api/v1/admin/quizzes/:id` - Delete quiz
