@@ -203,9 +203,6 @@ func initExt() {
 		users.GET("", api.AdminListUsers)
 		users.GET("/stats", api.GetUserStats)
 		users.GET("/:id", api.GetUserByID)
-		users.POST("/:id/restore", api.RestoreUser)
-		users.POST("/:id/disable", api.AdminDisableUser)
-		users.POST("/:id/enable", api.AdminEnableUser)
 	}
 
 	// Quiz endpoints (protected)
@@ -213,73 +210,73 @@ func initExt() {
 	quizzes.Use(middleware.Auth(jwtManager))
 	{
 		// Quiz CRUD
-		quizzes.POST("", api.CreateQuiz)                    // Create quiz
-		quizzes.GET("", api.ListMyQuizzes)                  // List my quizzes
-		quizzes.GET("/public", api.ListPublicQuizzes)       // List public quizzes
-		quizzes.GET("/:id", api.GetQuiz)                    // Get quiz by ID
-		quizzes.GET("/:id/full", api.GetQuizWithQuestions)  // Get quiz with questions
-		quizzes.PATCH("/:id", api.UpdateQuiz)               // Update quiz
-		quizzes.DELETE("/:id", api.DeleteQuiz)              // Delete quiz
-		quizzes.POST("/:id/publish", api.PublishQuiz)       // Publish quiz
-		quizzes.POST("/:id/unpublish", api.UnpublishQuiz)   // Unpublish quiz
+		quizzes.POST("", api.CreateQuiz)                   // Create quiz
+		quizzes.GET("", api.ListMyQuizzes)                 // List my quizzes
+		quizzes.GET("/public", api.ListPublicQuizzes)      // List public quizzes
+		quizzes.GET("/:id", api.GetQuiz)                   // Get quiz by ID
+		quizzes.GET("/:id/full", api.GetQuizWithQuestions) // Get quiz with questions
+		quizzes.PATCH("/:id", api.UpdateQuiz)              // Update quiz
+		quizzes.DELETE("/:id", api.DeleteQuiz)             // Delete quiz
+		quizzes.POST("/:id/publish", api.PublishQuiz)      // Publish quiz
+		quizzes.POST("/:id/unpublish", api.UnpublishQuiz)  // Unpublish quiz
 
 		// Question CRUD
-		quizzes.POST("/:id/questions", api.AddQuestion)           // Add question to quiz
-		quizzes.GET("/questions/:qid", api.GetQuestion)           // Get question by ID
-		quizzes.PATCH("/questions/:qid", api.UpdateQuestion)      // Update question
-		quizzes.DELETE("/questions/:qid", api.DeleteQuestion)     // Delete question
+		quizzes.POST("/:id/questions", api.AddQuestion)       // Add question to quiz
+		quizzes.GET("/questions/:qid", api.GetQuestion)       // Get question by ID
+		quizzes.PATCH("/questions/:qid", api.UpdateQuestion)  // Update question
+		quizzes.DELETE("/questions/:qid", api.DeleteQuestion) // Delete question
 
 		// Answer CRUD
-		quizzes.POST("/questions/:qid/answers", api.AddAnswer)    // Add answer to question
-		quizzes.PATCH("/answers/:aid", api.UpdateAnswer)          // Update answer
-		quizzes.DELETE("/answers/:aid", api.DeleteAnswer)         // Delete answer
+		quizzes.POST("/questions/:qid/answers", api.AddAnswer) // Add answer to question
+		quizzes.PATCH("/answers/:aid", api.UpdateAnswer)       // Update answer
+		quizzes.DELETE("/answers/:aid", api.DeleteAnswer)      // Delete answer
 	}
 	// File upload endpoints (protected)
 	files := v1.Group("/files")
 	files.Use(middleware.Auth(jwtManager))
 	{
-		files.POST("/upload", api.UploadFile)        // Upload file
-		files.GET("", api.ListFiles)                 // List user files
-		files.DELETE("/:id", api.DeleteFile)         // Delete file
+		files.POST("/upload", api.UploadFile) // Upload file
+		files.GET("", api.ListFiles)          // List user files
+		files.DELETE("/:id", api.DeleteFile)  // Delete file
 	}
 
 	// AI generation endpoints (protected)
 	aiGroup := v1.Group("/ai")
 	aiGroup.Use(middleware.Auth(jwtManager))
 	{
-		aiGroup.POST("/generate-quiz-from-text", api.GenerateQuizFromText)  // Generate from text
-		aiGroup.POST("/generate-quiz-from-file", api.GenerateQuizFromFile)  // Generate from file
-		aiGroup.GET("/generation-status/:id", api.GetGenerationStatus)      // Check status
-		aiGroup.GET("/jobs", api.ListJobs)                                  // List jobs
+		aiGroup.POST("/generate-quiz-from-text", api.GenerateQuizFromText) // Generate from text
+		aiGroup.POST("/generate-quiz-from-file", api.GenerateQuizFromFile) // Generate from file
+		aiGroup.GET("/generation-status/:id", api.GetGenerationStatus)     // Check status
+		aiGroup.GET("/jobs", api.ListJobs)                                 // List jobs
 	}
 
 	// Attempt endpoints (protected)
 	attempts := v1.Group("/attempts")
 	attempts.Use(middleware.Auth(jwtManager))
 	{
-		attempts.GET("", api.ListMyAttempts)                    // List my attempts
-		attempts.GET("/:id", api.GetAttempt)                    // Get attempt by ID
-		attempts.GET("/:id/results", api.GetAttemptResult)      // Get attempt result
-		attempts.POST("/:id/answers", api.SubmitAnswer)         // Submit answer
-		attempts.POST("/:id/finish", api.FinishAttempt)         // Finish attempt
+		attempts.GET("", api.ListMyAttempts)               // List my attempts
+		attempts.GET("/:id", api.GetAttempt)               // Get attempt by ID
+		attempts.GET("/:id/results", api.GetAttemptResult) // Get attempt result
+		attempts.POST("/:id/answers", api.SubmitAnswer)    // Submit answer
+		attempts.POST("/:id/finish", api.FinishAttempt)    // Finish attempt
 	}
 
 	// Add attempt routes to quizzes group
-	quizzes.POST("/:id/attempts", api.StartAttempt)            // Start quiz attempt
-	quizzes.GET("/:id/stats", api.GetQuizStats)                // Get quiz stats (creator only)
+	quizzes.POST("/:id/attempts", api.StartAttempt) // Start quiz attempt
+	quizzes.GET("/:id/stats", api.GetQuizStats)     // Get quiz stats (creator only)
 
 	// Phase 6: Search and Discovery
-	v1.GET("/quizzes/search", api.SearchQuizzes)              // Search quizzes (public)
-	v1.GET("/categories", api.GetCategories)                   // Get categories (public)
-	v1.GET("/tags", api.GetPopularTags)                        // Get popular tags (public)
-	v1.GET("/share/:code", api.GetQuizByShareCode)             // Get quiz by share code (public)
+	v1.GET("/quizzes/search", api.SearchQuizzes)   // Search quizzes (public)
+	v1.GET("/categories", api.GetCategories)       // Get categories (public)
+	v1.GET("/tags", api.GetPopularTags)            // Get popular tags (public)
+	v1.GET("/share/:code", api.GetQuizByShareCode) // Get quiz by share code (public)
 
 	// Phase 6: Quiz Statistics and Sharing (protected)
-	quizzes.GET("/:id/statistics", api.GetQuizStatistics)      // Get quiz statistics (creator only)
-	quizzes.POST("/:id/share", api.GenerateShareLink)          // Generate share link (creator only)
+	quizzes.GET("/:id/statistics", api.GetQuizStatistics) // Get quiz statistics (creator only)
+	quizzes.POST("/:id/share", api.GenerateShareLink)     // Generate share link (creator only)
 
 	// Phase 6: User Statistics (protected)
-	users.GET("/me/statistics", api.GetUserStatistics)         // Get my statistics
+	users.GET("/me/statistics", api.GetUserStatistics) // Get my statistics
 
 	// Phase 6: Templates (protected)
 	templates := v1.Group("/templates")
@@ -298,22 +295,23 @@ func initExt() {
 	admin.Use(middleware.RequireAdmin())
 	{
 		// User Management
-		admin.GET("/users", api.AdminListUsers)                  // List all users
-		admin.GET("/users/:id", api.GetUserDetails)         // Get user details
-		admin.PATCH("/users/:id/role", api.ChangeUserRole)  // Change user role
-		admin.POST("/users/:id/disable", api.AdminDisableUser)   // Disable user
-		admin.POST("/users/:id/enable", api.AdminEnableUser)     // Enable user
-		admin.DELETE("/users/:id", api.DeleteUser)          // Delete user (permanent)
+		admin.GET("/users", api.AdminListUsers)                // List all users
+		admin.GET("/users/:id", api.GetUserDetails)            // Get user details
+		admin.PATCH("/users/:id/role", api.ChangeUserRole)     // Change user role
+		admin.POST("/users/:id/disable", api.AdminDisableUser) // Disable user
+		admin.POST("/users/:id/enable", api.AdminEnableUser)   // Enable user
+		admin.POST("/users/:id/restore", api.RestoreUser)      // Restore deleted user
+		admin.DELETE("/users/:id", api.DeleteUser)             // Delete user (permanent)
 
 		// Quiz Moderation
-		admin.GET("/quizzes", api.ListQuizzesAdmin)         // List all quizzes
-		admin.GET("/quizzes/:id", api.GetQuizDetailsAdmin)  // Get quiz details
-		admin.DELETE("/quizzes/:id", api.DeleteQuizAdmin)   // Delete quiz
+		admin.GET("/quizzes", api.ListQuizzesAdmin)        // List all quizzes
+		admin.GET("/quizzes/:id", api.GetQuizDetailsAdmin) // Get quiz details
+		admin.DELETE("/quizzes/:id", api.DeleteQuizAdmin)  // Delete quiz
 
 		// Statistics
-		admin.GET("/stats", api.GetPlatformStats)           // Get platform statistics
-		admin.GET("/stats/activity", api.GetUserActivity)   // Get activity timeline
-		admin.GET("/logs", api.GetActivityLogs)             // Get activity logs
+		admin.GET("/stats", api.GetPlatformStats)         // Get platform statistics
+		admin.GET("/stats/activity", api.GetUserActivity) // Get activity timeline
+		admin.GET("/logs", api.GetActivityLogs)           // Get activity logs
 	}
 
 	// Create HTTP server
