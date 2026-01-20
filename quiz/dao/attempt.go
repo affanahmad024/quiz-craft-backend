@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/model"
@@ -699,4 +700,90 @@ func GetExpiredAttempts(ctx context.Context, limit int) ([]*model.QuizAttempt, e
 
 	commons.Log(ctx, "[dao.GetExpiredAttempts::OK [count=%d", len(attempts))
 	return attempts, nil
+}
+
+// GetLatestAttemptsByQuizIDs retrieves the latest attempt for each quiz for a specific user
+func GetLatestAttemptsByQuizIDs(ctx context.Context, userID uuid.UUID, quizIDs []string) (map[string]*model.LatestAttemptInfo, error) {
+	commons.Log(ctx, "[dao.GetLatestAttemptsByQuizIDs [user_id=%s [quiz_count=%d", userID, len(quizIDs))
+
+	if len(quizIDs) == 0 {
+		return make(map[string]*model.LatestAttemptInfo), nil
+	}
+
+	// Build placeholders for quiz IDs
+	placeholders := ""
+	args := []interface{}{userID}
+	for i, quizID := range quizIDs {
+		if i > 0 {
+			placeholders += ", "
+		}
+		placeholders += "$" + fmt.Sprintf("%d", i+2)
+		args = append(args, quizID)
+	}
+
+	qry := `
+		WITH ranked_attempts AS (
+			SELECT
+				id, quiz_id, user_id, status, started_at, submitted_at,
+				score, max_score, percentage, passed,
+				ROW_NUMBER() OVER (PARTITION BY quiz_id ORDER BY started_at DESC) as rn
+			FROM quiz_attempts
+			WHERE user_id = $1 AND quiz_id IN (` + placeholders + `)
+		)
+		SELECT id, quiz_id, status, started_at, submitted_at, score, max_score, percentage, passed
+		FROM ranked_attempts
+		WHERE rn = 1`
+
+	rows, err := db.QueryContext(ctx, qry, args...)
+	if err != nil {
+		commons.LogE(ctx, "[dao.GetLatestAttemptsByQuizIDs::QueryErr [err=%v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]*model.LatestAttemptInfo)
+	for rows.Next() {
+		var attemptID, quizID, status string
+		var startedAt time.Time
+		var submittedAt sql.NullTime
+		var score sql.NullFloat64
+		var maxScore sql.NullInt64
+		var percentage sql.NullFloat64
+		var passed sql.NullBool
+
+		err := rows.Scan(&attemptID, &quizID, &status, &startedAt, &submittedAt,
+			&score, &maxScore, &percentage, &passed)
+		if err != nil {
+			commons.LogE(ctx, "[dao.GetLatestAttemptsByQuizIDs::ScanErr [err=%v", err)
+			return nil, err
+		}
+
+		info := &model.LatestAttemptInfo{
+			AttemptID: attemptID,
+			Status:    status,
+			StartedAt: startedAt,
+		}
+
+		if submittedAt.Valid {
+			info.SubmittedAt = &submittedAt.Time
+		}
+		if score.Valid {
+			info.Score = &score.Float64
+		}
+		if maxScore.Valid {
+			maxScoreInt := int(maxScore.Int64)
+			info.MaxScore = &maxScoreInt
+		}
+		if percentage.Valid {
+			info.Percentage = &percentage.Float64
+		}
+		if passed.Valid {
+			info.Passed = &passed.Bool
+		}
+
+		result[quizID] = info
+	}
+
+	commons.Log(ctx, "[dao.GetLatestAttemptsByQuizIDs::OK [found=%d", len(result))
+	return result, nil
 }

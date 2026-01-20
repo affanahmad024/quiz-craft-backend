@@ -210,6 +210,9 @@ func ListPublicQuizzes(c *gin.Context) {
 	c.Set(commons.TidRespHdr, tid)
 	ip := c.ClientIP()
 
+	// Extract user ID if authenticated (optional for public quizzes)
+	userID, _ := commons.UsrID(ctx)
+
 	// Parse filters
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
@@ -225,9 +228,9 @@ func ListPublicQuizzes(c *gin.Context) {
 		Search:     search,
 	}
 
-	commons.Log(ctx, "[api.ListPublicQuizzes [filter=%+v", filter)
+	commons.Log(ctx, "[api.ListPublicQuizzes [user_id=%s [filter=%+v", userID, filter)
 
-	quizzes, total, err := core.ListPublicQuizzes(ctx, filter)
+	quizzes, total, err := core.ListPublicQuizzes(ctx, userID.String(), filter)
 	if err != nil {
 		commons.LogC(ctx, "[api.ListPublicQuizzes::KO [time_taken=%v [ip=%s [err=%v",
 			time.Since(st), ip, err)

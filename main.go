@@ -232,6 +232,7 @@ func initExt() {
 		quizzes.PATCH("/answers/:aid", api.UpdateAnswer)       // Update answer
 		quizzes.DELETE("/answers/:aid", api.DeleteAnswer)      // Delete answer
 	}
+
 	// File upload endpoints (protected)
 	files := v1.Group("/files")
 	files.Use(middleware.Auth(jwtManager))

@@ -165,13 +165,34 @@ func ListMyQuizzes(ctx context.Context, creatorID string, filter model.QuizListF
 		return nil, 0, err
 	}
 
+	// Fetch latest attempt information for each quiz
+	if len(quizzes) > 0 {
+		quizIDs := make([]string, len(quizzes))
+		for i, quiz := range quizzes {
+			quizIDs[i] = quiz.ID
+		}
+
+		latestAttempts, err := quizdao.GetLatestAttemptsByQuizIDs(ctx, creatorUUID, quizIDs)
+		if err != nil {
+			commons.LogW(ctx, "[core.ListMyQuizzes::GetAttemptsErr [err=%v", err)
+			// Non-critical error, continue without attempt info
+		} else {
+			// Attach latest attempt info to each quiz
+			for _, quiz := range quizzes {
+				if attemptInfo, ok := latestAttempts[quiz.ID]; ok {
+					quiz.LatestAttempt = attemptInfo
+				}
+			}
+		}
+	}
+
 	commons.Log(ctx, "[core.ListMyQuizzes::OK [creator_id=%s [total=%d [returned=%d", creatorID, total, len(quizzes))
 	return quizzes, total, nil
 }
 
 // ListPublicQuizzes lists public published quizzes
-func ListPublicQuizzes(ctx context.Context, filter model.QuizListFilter) ([]*model.Quiz, int, error) {
-	commons.Log(ctx, "[core.ListPublicQuizzes [page=%d", filter.Page)
+func ListPublicQuizzes(ctx context.Context, userID string, filter model.QuizListFilter) ([]*model.Quiz, int, error) {
+	commons.Log(ctx, "[core.ListPublicQuizzes [user_id=%s [page=%d", userID, filter.Page)
 
 	// Set defaults
 	if filter.Page < 1 {
@@ -185,6 +206,30 @@ func ListPublicQuizzes(ctx context.Context, filter model.QuizListFilter) ([]*mod
 	if err != nil {
 		commons.LogE(ctx, "[core.ListPublicQuizzes::ListErr [err=%v", err)
 		return nil, 0, err
+	}
+
+	// Fetch latest attempt information for authenticated user
+	if userID != "" && len(quizzes) > 0 {
+		userUUID, err := uuid.Parse(userID)
+		if err == nil {
+			quizIDs := make([]string, len(quizzes))
+			for i, quiz := range quizzes {
+				quizIDs[i] = quiz.ID
+			}
+
+			latestAttempts, err := quizdao.GetLatestAttemptsByQuizIDs(ctx, userUUID, quizIDs)
+			if err != nil {
+				commons.LogW(ctx, "[core.ListPublicQuizzes::GetAttemptsErr [err=%v", err)
+				// Non-critical error, continue without attempt info
+			} else {
+				// Attach latest attempt info to each quiz
+				for _, quiz := range quizzes {
+					if attemptInfo, ok := latestAttempts[quiz.ID]; ok {
+						quiz.LatestAttempt = attemptInfo
+					}
+				}
+			}
+		}
 	}
 
 	commons.Log(ctx, "[core.ListPublicQuizzes::OK [total=%d [returned=%d", total, len(quizzes))

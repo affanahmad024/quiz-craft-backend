@@ -32,10 +32,25 @@ type Quiz struct {
 	TemplateUsageCount int        `json:"template_usage_count"`
 	BasedOnTemplateID  *string    `json:"based_on_template_id,omitempty"`
 
-	Meta             JSONMap        `json:"meta,omitempty"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	DeletedAt        *time.Time     `json:"deleted_at,omitempty"`
+	Meta             JSONMap              `json:"meta,omitempty"`
+	CreatedAt        time.Time            `json:"created_at"`
+	UpdatedAt        time.Time            `json:"updated_at"`
+	DeletedAt        *time.Time           `json:"deleted_at,omitempty"`
+
+	// Latest attempt information (populated only when listing quizzes for a specific user)
+	LatestAttempt    *LatestAttemptInfo   `json:"latest_attempt,omitempty"`
+}
+
+// LatestAttemptInfo contains summary of the latest quiz attempt
+type LatestAttemptInfo struct {
+	AttemptID   string     `json:"attempt_id"`
+	Status      string     `json:"status"` // in_progress, submitted, expired, abandoned
+	StartedAt   time.Time  `json:"started_at"`
+	SubmittedAt *time.Time `json:"submitted_at,omitempty"`
+	Score       *float64   `json:"score,omitempty"`
+	MaxScore    *int       `json:"max_score,omitempty"`
+	Percentage  *float64   `json:"percentage,omitempty"`
+	Passed      *bool      `json:"passed,omitempty"`
 }
 
 // JSONMap is a custom type for JSONB fields
