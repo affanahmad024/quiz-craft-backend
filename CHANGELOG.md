@@ -24,6 +24,15 @@ All notable changes to the QuizCraft Backend will be documented in this file.
   - Generated questions automatically include `meta.image_url` where relevant
   - Supports multiple reference images per generation job
 
+- **Image Support for Manual Question Creation**: Enhanced manual question endpoints to support image attachments
+  - `POST /quizzes/:id/questions` now accepts `image_file_id` parameter
+  - `POST /quizzes/:id/questions/bulk` supports `image_file_id` for each question
+  - `PATCH /quizzes/questions/:qid` supports adding, updating, or removing images
+  - Upload image via `POST /files/upload`, then reference by file ID
+  - Automatic validation: file ownership, existence, and proper format
+  - Images stored in `meta.image_url` and `meta.image_file_id` fields
+  - Support for add (provide ID), update (change ID), remove (empty string), or no change (omit field)
+
 ### Technical
 - Added `ImageProcessorService` for image compression and storage
 - Enhanced `AIQuestion` model with `ImageData` field for base64 image handling
@@ -34,14 +43,19 @@ All notable changes to the QuizCraft Backend will be documented in this file.
 - Enhanced `QuizGeneratorService` to process and save question images
 - Updated worker to handle generation, extraction, and reference image loading
 - Enhanced generation endpoints to accept `reference_images` parameter
+- Added `ImageFileID` field to `QuestionInput` and `QuestionUpdateInput` models
+- Enhanced `AddQuestion` core function to process and validate image file IDs
+- Enhanced `AddQuestionsBulk` core function to handle images for multiple questions
+- Enhanced `UpdateQuestion` core function to support add/update/remove image operations
 - Images served via existing `/api/v1/files/serve/:id` endpoint
 
 ### Documentation
 - Added comprehensive AI quiz extraction guide in API_DOCUMENTATION.md
 - Added comprehensive reference images guide in API_DOCUMENTATION.md
-- Updated AI generation endpoints documentation with image support
+- Added comprehensive manual question image support guide in API_DOCUMENTATION.md
+- Updated question creation endpoints documentation with image support
 - Updated endpoint count (67 total)
-- Added usage examples, workflows, and limitations
+- Added usage examples, workflows, error handling, and limitations
 
 ## [1.1.0] - 2026-01-20
 

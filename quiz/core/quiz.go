@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	aidao "github.com/affanahmad024/quiz-craft/backend/ai-agent/dao"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/model"
@@ -444,6 +445,40 @@ func AddQuestion(ctx context.Context, quizID string, userID string, input model.
 		return nil, err
 	}
 
+	// Initialize meta if nil
+	if input.Meta == nil {
+		input.Meta = model.JSONMap{}
+	}
+
+	// Process image file if provided
+	if input.ImageFileID != nil && *input.ImageFileID != "" {
+		fileUUID, err := uuid.Parse(*input.ImageFileID)
+		if err != nil {
+			commons.LogW(ctx, "[core.AddQuestion::InvalidImageFileID [err=%v", err)
+			return nil, commons.BadInput("invalid-image-file-id")
+		}
+
+		// Verify file exists and belongs to user
+		file, err := aidao.GetFileByID(ctx, fileUUID)
+		if err != nil {
+			commons.LogE(ctx, "[core.AddQuestion::GetFileErr [file_id=%s [err=%v", *input.ImageFileID, err)
+			if commons.IsNotFound(err) {
+				return nil, commons.BadInput("image-file-not-found")
+			}
+			return nil, err
+		}
+
+		if file.UserID != userID {
+			commons.LogW(ctx, "[core.AddQuestion::ImageFileNotOwned [file_id=%s [user_id=%s", *input.ImageFileID, userID)
+			return nil, commons.Forbidden("not-image-file-owner")
+		}
+
+		// Populate meta with image information
+		input.Meta["image_url"] = fmt.Sprintf("/api/v1/files/serve/%s", file.ID)
+		input.Meta["image_file_id"] = file.ID
+		commons.Log(ctx, "[core.AddQuestion [attached_image=%s", file.ID)
+	}
+
 	// Create question
 	question := &model.Question{
 		ID:           uuid.New().String(),
@@ -542,6 +577,40 @@ func AddQuestionsBulk(ctx context.Context, quizID string, userID string, input m
 	allAnswers := make([]*model.Answer, 0)
 
 	for i, questionInput := range input.Questions {
+		// Initialize meta if nil
+		if questionInput.Meta == nil {
+			questionInput.Meta = model.JSONMap{}
+		}
+
+		// Process image file if provided
+		if questionInput.ImageFileID != nil && *questionInput.ImageFileID != "" {
+			fileUUID, err := uuid.Parse(*questionInput.ImageFileID)
+			if err != nil {
+				commons.LogW(ctx, "[core.AddQuestionsBulk::InvalidImageFileID [question_index=%d [err=%v", i, err)
+				return nil, commons.BadInput(fmt.Sprintf("question %d: invalid-image-file-id", i))
+			}
+
+			// Verify file exists and belongs to user
+			file, err := aidao.GetFileByID(ctx, fileUUID)
+			if err != nil {
+				commons.LogE(ctx, "[core.AddQuestionsBulk::GetFileErr [question_index=%d [file_id=%s [err=%v", i, *questionInput.ImageFileID, err)
+				if commons.IsNotFound(err) {
+					return nil, commons.BadInput(fmt.Sprintf("question %d: image-file-not-found", i))
+				}
+				return nil, err
+			}
+
+			if file.UserID != userID {
+				commons.LogW(ctx, "[core.AddQuestionsBulk::ImageFileNotOwned [question_index=%d [file_id=%s [user_id=%s", i, *questionInput.ImageFileID, userID)
+				return nil, commons.Forbidden(fmt.Sprintf("question %d: not-image-file-owner", i))
+			}
+
+			// Populate meta with image information
+			questionInput.Meta["image_url"] = fmt.Sprintf("/api/v1/files/serve/%s", file.ID)
+			questionInput.Meta["image_file_id"] = file.ID
+			commons.Log(ctx, "[core.AddQuestionsBulk [question_index=%d [attached_image=%s", i, file.ID)
+		}
+
 		// Create question
 		question := &model.Question{
 			ID:           uuid.New().String(),
@@ -654,6 +723,48 @@ func UpdateQuestion(ctx context.Context, questionID string, userID string, input
 	}
 	if input.Meta != nil {
 		question.Meta = input.Meta
+	}
+
+	// Handle image file updates
+	if input.ImageFileID != nil {
+		// Initialize meta if nil
+		if question.Meta == nil {
+			question.Meta = model.JSONMap{}
+		}
+
+		if *input.ImageFileID == "" {
+			// Empty string means remove image
+			delete(question.Meta, "image_url")
+			delete(question.Meta, "image_file_id")
+			commons.Log(ctx, "[core.UpdateQuestion [removed_image]")
+		} else {
+			// New image file ID - validate and update
+			fileUUID, err := uuid.Parse(*input.ImageFileID)
+			if err != nil {
+				commons.LogW(ctx, "[core.UpdateQuestion::InvalidImageFileID [err=%v", err)
+				return nil, commons.BadInput("invalid-image-file-id")
+			}
+
+			// Verify file exists and belongs to user
+			file, err := aidao.GetFileByID(ctx, fileUUID)
+			if err != nil {
+				commons.LogE(ctx, "[core.UpdateQuestion::GetFileErr [file_id=%s [err=%v", *input.ImageFileID, err)
+				if commons.IsNotFound(err) {
+					return nil, commons.BadInput("image-file-not-found")
+				}
+				return nil, err
+			}
+
+			if file.UserID != userID {
+				commons.LogW(ctx, "[core.UpdateQuestion::ImageFileNotOwned [file_id=%s [user_id=%s", *input.ImageFileID, userID)
+				return nil, commons.Forbidden("not-image-file-owner")
+			}
+
+			// Update meta with new image information
+			question.Meta["image_url"] = fmt.Sprintf("/api/v1/files/serve/%s", file.ID)
+			question.Meta["image_file_id"] = file.ID
+			commons.Log(ctx, "[core.UpdateQuestion [updated_image=%s", file.ID)
+		}
 	}
 
 	// Validate

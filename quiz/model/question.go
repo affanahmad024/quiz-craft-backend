@@ -107,7 +107,8 @@ type QuestionInput struct {
 	Points       int           `json:"points"`
 	Explanation  string        `json:"explanation,omitempty"`
 	Meta         JSONMap       `json:"meta,omitempty"`
-	Answers      []AnswerInput `json:"answers,omitempty"` // Optional answers to create with question
+	ImageFileID  *string       `json:"image_file_id,omitempty"` // Optional image file ID
+	Answers      []AnswerInput `json:"answers,omitempty"`       // Optional answers to create with question
 }
 
 // BulkQuestionsInput represents input for creating multiple questions at once
@@ -122,4 +123,5 @@ type QuestionUpdateInput struct {
 	Points       *int    `json:"points,omitempty"`
 	Explanation  *string `json:"explanation,omitempty"`
 	Meta         JSONMap `json:"meta,omitempty"`
+	ImageFileID  *string `json:"image_file_id,omitempty"` // Optional image file ID (nil=no change, empty=remove, value=update)
 }

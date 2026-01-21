@@ -388,6 +388,8 @@ curl -X GET "http://localhost:8080/api/v1/quizzes/public?category=Programming&di
 
 ### Add Question
 
+Add a single question to a quiz, optionally with answers and an image attachment.
+
 **Request:**
 ```bash
 curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions \
@@ -399,6 +401,7 @@ curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions \
     "points": 10,
     "order_index": 0,
     "explanation": "typeof null returns object due to a legacy bug in JavaScript",
+    "image_file_id": "abc123-def456",
     "answers": [
       {
         "answer_text": "null",
@@ -424,9 +427,23 @@ curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions \
   }'
 ```
 
+**Request Fields:**
+- `question_text` (string, required): The question text
+- `question_type` (string, required): Type of question (`multiple_choice`, `true_false`, `short_answer`)
+- `points` (int, required): Points awarded for correct answer
+- `explanation` (string, optional): Explanation of the answer
+- `image_file_id` (string, optional): File ID of an uploaded image to attach to the question
+- `answers` (array, optional): Array of answer objects to create with the question
+
+**Image Workflow:**
+1. First upload an image: `POST /api/v1/files/upload`
+2. Get the `file_id` from the response
+3. Include the `file_id` in the `image_file_id` field when creating the question
+4. The question will automatically have `meta.image_url` and `meta.image_file_id` populated
+
 ### Add Multiple Questions (Bulk)
 
-Add multiple questions with answers in a single API call. All questions are created in an atomic transaction.
+Add multiple questions with answers in a single API call. All questions are created in an atomic transaction. Each question can optionally have an attached image.
 
 **Request:**
 ```bash
@@ -440,6 +457,7 @@ curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions/bulk \
         "question_type": "multiple_choice",
         "points": 10,
         "explanation": "Basic arithmetic",
+        "image_file_id": "img-123",
         "answers": [
           {"answer_text": "3", "is_correct": false},
           {"answer_text": "4", "is_correct": true},
@@ -450,6 +468,7 @@ curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions/bulk \
         "question_text": "What is the capital of France?",
         "question_type": "multiple_choice",
         "points": 10,
+        "image_file_id": "img-456",
         "answers": [
           {"answer_text": "London", "is_correct": false},
           {"answer_text": "Paris", "is_correct": true},
@@ -492,7 +511,39 @@ curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions/bulk \
 - All-or-nothing transaction: If one question fails, none are created
 - Automatic order indexing
 - Each question can include its answers
-- Validates all questions and answers before creating
+- Each question can optionally have an attached image via `image_file_id`
+- Validates all questions, answers, and image files before creating
+- Images must be uploaded first via `POST /files/upload`
+
+### Update Question
+
+Update an existing question's details, including adding, updating, or removing an attached image.
+
+**Request:**
+```bash
+curl -X PATCH http://localhost:8080/api/v1/quizzes/questions/{question_id} \
+  -H "Authorization: Bearer {access_token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question_text": "Updated question text",
+    "points": 15,
+    "explanation": "Updated explanation",
+    "image_file_id": "new-image-id"
+  }'
+```
+
+**Image Operations:**
+- **Add image**: Provide `image_file_id` with a valid file ID
+- **Update image**: Provide `image_file_id` with a different file ID
+- **Remove image**: Provide `image_file_id` with an empty string `""`
+- **No change**: Omit the `image_file_id` field entirely
+
+**Example - Remove Image:**
+```json
+{
+  "image_file_id": ""
+}
+```
 
 ### Start Quiz Attempt
 
@@ -1047,4 +1098,235 @@ curl -X POST http://localhost:8080/api/v1/ai/generate-quiz-from-file \
 - ✅ **Automatic Image Handling:** Images compressed and stored automatically
 - ✅ **Flexible:** Use images only where relevant
 - ✅ **Same API:** Works with existing generation workflow
-- ✅ **Quality Control:** AI validates image-question relevance
+
+---
+
+## Manual Question Image Support
+
+### Overview
+
+Attach images to manually created questions for visual learning. Images are uploaded separately and then referenced by ID when creating or updating questions.
+
+### Key Features
+
+- 📷 **Attach Images to Questions:** Add images to single or multiple questions
+- 🔄 **Update Images:** Change or remove question images anytime
+- ✅ **Automatic Validation:** System verifies file ownership and existence
+- 📦 **Bulk Support:** Attach images to multiple questions at once
+- 🔗 **File ID Reference:** Clean API using pre-uploaded file IDs
+
+### How It Works
+
+**1. Upload Image First**
+```bash
+curl -X POST http://localhost:8080/api/v1/files/upload \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@question-image.jpg"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "File uploaded successfully",
+  "data": {
+    "file_id": "abc123-def456",
+    "filename": "question-image.jpg",
+    "size": 245678,
+    "mime_type": "image/jpeg"
+  }
+}
+```
+
+**2. Create Question with Image**
+```bash
+curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question_text": "What animal is shown in the image?",
+    "question_type": "multiple_choice",
+    "points": 10,
+    "image_file_id": "abc123-def456",
+    "answers": [
+      {"answer_text": "Dog", "is_correct": false},
+      {"answer_text": "Cat", "is_correct": true},
+      {"answer_text": "Bird", "is_correct": false}
+    ]
+  }'
+```
+
+**3. Question Response Includes Image URL**
+```json
+{
+  "id": "question-uuid",
+  "question_text": "What animal is shown in the image?",
+  "meta": {
+    "image_url": "/api/v1/files/serve/abc123-def456",
+    "image_file_id": "abc123-def456"
+  }
+}
+```
+
+### Bulk Questions with Images
+
+Create multiple questions with images in a single transaction:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions/bulk \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "questions": [
+      {
+        "question_text": "Question 1 with image",
+        "question_type": "multiple_choice",
+        "points": 10,
+        "image_file_id": "image-1-id",
+        "answers": [...]
+      },
+      {
+        "question_text": "Question 2 with image",
+        "question_type": "multiple_choice",
+        "points": 10,
+        "image_file_id": "image-2-id",
+        "answers": [...]
+      },
+      {
+        "question_text": "Question 3 without image",
+        "question_type": "multiple_choice",
+        "points": 10,
+        "answers": [...]
+      }
+    ]
+  }'
+```
+
+### Update Question Images
+
+**Add Image to Existing Question:**
+```bash
+curl -X PATCH http://localhost:8080/api/v1/quizzes/questions/{question_id} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_file_id": "new-image-id"
+  }'
+```
+
+**Change Question Image:**
+```bash
+curl -X PATCH http://localhost:8080/api/v1/quizzes/questions/{question_id} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_file_id": "different-image-id"
+  }'
+```
+
+**Remove Image from Question:**
+```bash
+curl -X PATCH http://localhost:8080/api/v1/quizzes/questions/{question_id} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_file_id": ""
+  }'
+```
+
+### Image Operations Summary
+
+| Operation | `image_file_id` Value | Result |
+|-----------|----------------------|--------|
+| Add Image | Valid file ID | Image attached to question |
+| Update Image | Different file ID | Image replaced |
+| Remove Image | Empty string `""` | Image removed from question |
+| No Change | Omit field | Image unchanged |
+
+### Workflow Example
+
+```
+1. Upload multiple images
+   POST /files/upload (image 1) → file_id_1
+   POST /files/upload (image 2) → file_id_2
+   POST /files/upload (image 3) → file_id_3
+
+2. Create quiz
+   POST /quizzes → quiz_id
+
+3. Add questions with images
+   POST /quizzes/{quiz_id}/questions/bulk
+   {
+     "questions": [
+       {"question_text": "...", "image_file_id": "file_id_1", ...},
+       {"question_text": "...", "image_file_id": "file_id_2", ...},
+       {"question_text": "...", "image_file_id": "file_id_3", ...}
+     ]
+   }
+
+4. Update a question's image
+   PATCH /quizzes/questions/{question_id}
+   {"image_file_id": "file_id_4"}
+
+5. Remove image from another question
+   PATCH /quizzes/questions/{question_id}
+   {"image_file_id": ""}
+```
+
+### Validation Rules
+
+- ✅ File must exist in the system
+- ✅ File must belong to the requesting user
+- ✅ File ID must be a valid UUID format
+- ✅ Same validation applies to single and bulk operations
+- ✅ Bulk operations are atomic: if any validation fails, no questions are created
+
+### Use Cases
+
+- **Visual Questions:** Math diagrams, geometry problems, charts
+- **Identification:** Name the object, animal, landmark, person
+- **Technical Diagrams:** Circuit diagrams, network topology, architecture
+- **Medical Images:** Anatomy identification, X-rays, scans
+- **Language Learning:** Picture vocabulary, scene descriptions
+- **Art & History:** Identify paintings, artifacts, historical events
+
+### Benefits
+
+- ✅ **Clean API:** Upload once, reference by ID
+- ✅ **Reusable Images:** Use same image across multiple questions
+- ✅ **Atomic Bulk Operations:** All-or-nothing question creation
+- ✅ **Flexible Updates:** Add, change, or remove images anytime
+- ✅ **Validation:** Automatic file ownership and existence checks
+- ✅ **Consistent Storage:** All images stored in `meta.image_url`
+
+### Error Handling
+
+**Invalid File ID:**
+```json
+{
+  "success": false,
+  "error": "invalid-image-file-id"
+}
+```
+
+**File Not Found:**
+```json
+{
+  "success": false,
+  "error": "image-file-not-found"
+}
+```
+
+**File Not Owned:**
+```json
+{
+  "success": false,
+  "error": "not-image-file-owner"
+}
+```
+
+### Limits
+
+- No specific limit on images per quiz
+- File upload size: Depends on file upload endpoint limits
+- All images must be uploaded before creating questions
