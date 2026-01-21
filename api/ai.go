@@ -138,13 +138,15 @@ func GenerateQuizFromText(c *gin.Context) {
 
 	// Create generation job
 	job := &model.GenerationJob{
-		ID:          uuid.New().String(),
-		UserID:      userID,
-		TextContent: &req.Text,
-		Options:     req.Options,
-		Status:      "pending",
-		Progress:    0,
-		CreatedAt:   time.Now(),
+		ID:              uuid.New().String(),
+		UserID:          userID,
+		TextContent:     &req.Text,
+		JobType:         "generation",
+		ReferenceImages: req.ReferenceImages,
+		Options:         req.Options,
+		Status:          "pending",
+		Progress:        0,
+		CreatedAt:       time.Now(),
 	}
 
 	if err := dao.CreateJob(ctx, job); err != nil {
@@ -157,9 +159,10 @@ func GenerateQuizFromText(c *gin.Context) {
 		Success: true,
 		Message: "Quiz generation started",
 		Data: gin.H{
-			"generation_id":         job.ID,
-			"status":                "pending",
+			"generation_id":          job.ID,
+			"status":                 "pending",
 			"estimated_time_seconds": 30,
+			"reference_images_count": len(req.ReferenceImages),
 		},
 	})
 }
@@ -203,13 +206,15 @@ func GenerateQuizFromFile(c *gin.Context) {
 
 	// Create generation job
 	job := &model.GenerationJob{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		FileID:    &req.FileID,
-		Options:   req.Options,
-		Status:    "pending",
-		Progress:  0,
-		CreatedAt: time.Now(),
+		ID:              uuid.New().String(),
+		UserID:          userID,
+		FileID:          &req.FileID,
+		JobType:         "generation",
+		ReferenceImages: req.ReferenceImages,
+		Options:         req.Options,
+		Status:          "pending",
+		Progress:        0,
+		CreatedAt:       time.Now(),
 	}
 
 	if err := dao.CreateJob(ctx, job); err != nil {
@@ -225,6 +230,7 @@ func GenerateQuizFromFile(c *gin.Context) {
 			"generation_id":          job.ID,
 			"status":                 "pending",
 			"estimated_time_seconds": 60,
+			"reference_images_count": len(req.ReferenceImages),
 		},
 	})
 }
@@ -316,4 +322,92 @@ func ListJobs(c *gin.Context) {
 	}
 
 	commons.RespOK(c, response)
+}
+
+// ExtractQuizFromImage extracts quiz from uploaded image/PDF
+// POST /api/v1/ai/extract-quiz-from-image
+func ExtractQuizFromImage(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID := c.GetString("user_id")
+
+	commons.Log(ctx, "[api.ExtractQuizFromImage [user_id=%s", userID)
+
+	// Get file from request
+	file, fileHeader, err := c.Request.FormFile("file")
+	if err != nil {
+		commons.LogE(ctx, "[api.ExtractQuizFromImage::FormFileErr [err=%v", err)
+		commons.RespBadReq(c, "file is required")
+		return
+	}
+	defer file.Close()
+
+	// Get extract_images parameter (default: true)
+	extractImages := c.DefaultPostForm("extract_images", "true") == "true"
+
+	// Validate file type (image or PDF)
+	contentType := fileHeader.Header.Get("Content-Type")
+	validTypes := map[string]bool{
+		"image/jpeg":      true,
+		"image/jpg":       true,
+		"image/png":       true,
+		"application/pdf": true,
+	}
+
+	if !validTypes[contentType] {
+		commons.RespBadReq(c, "invalid file type. Only JPG, PNG, and PDF are supported")
+		return
+	}
+
+	// Validate file size (max 10MB)
+	maxSize := int64(10 * 1024 * 1024)
+	if fileHeader.Size > maxSize {
+		commons.RespBadReq(c, "file size exceeds 10MB limit")
+		return
+	}
+
+	// Save uploaded file temporarily
+	tempFile, err := fileUploadService.SaveFile(ctx, file, fileHeader, userID)
+	if err != nil {
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	// Create extraction job
+	job := &model.GenerationJob{
+		ID:       uuid.New().String(),
+		UserID:   userID,
+		FileID:   &tempFile.ID,
+		JobType:  "extraction",
+		Status:   "pending",
+		Progress: 0,
+		Options: model.QuizGenOptions{
+			NumQuestions: 0, // Will be determined by extraction
+			Difficulty:   "medium",
+			QuestionType: "mixed",
+			Category:     "extracted",
+			Language:     "en",
+		},
+		CreatedAt: time.Now(),
+	}
+
+	if err := dao.CreateJob(ctx, job); err != nil {
+		commons.RespISE(c, err)
+		return
+	}
+
+	// Return accepted with job ID
+	c.JSON(http.StatusAccepted, commons.APIResponse{
+		Success: true,
+		Message: "Quiz extraction started",
+		Data: gin.H{
+			"generation_id":          job.ID,
+			"status":                 "pending",
+			"extract_images":         extractImages,
+			"estimated_time_seconds": 45,
+		},
+	})
 }

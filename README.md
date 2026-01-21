@@ -88,14 +88,24 @@ All 8 phases completed and production-ready!
 
 ## 📊 Implementation Statistics
 
-- **66 REST API Endpoints** fully implemented
+- **67 REST API Endpoints** fully implemented
 - **14 Database Tables** with optimized schemas
 - **69 Unit Tests** (auth, scoring, validation, statistics)
 - **70+ Manual Test Scenarios**
-- **2,200+ lines** of API integration documentation
+- **2,300+ lines** of API integration documentation
 - **100% Phase Completion** (8/8 phases)
 
 ## 🎯 Recent Enhancements
+
+### AI Quiz Extraction from Images (Jan 2026) 🆕
+- **Upload quiz photos or PDFs** and automatically extract structure
+- Google Gemini Vision API extracts questions, answers, and correct options
+- **Automatic image detection** - extracts images embedded in questions
+- Image compression (75% quality) optimizes storage
+- Support for JPG, PNG, PDF formats (max 10MB)
+- Background processing with progress tracking
+- Images stored in `meta.image_url` field for easy access
+- Perfect for digitizing paper quizzes, textbooks, or exam papers
 
 ### Bulk Question Creation (Jan 2026)
 - Add multiple questions with answers in a single API call
@@ -308,9 +318,10 @@ backend/
 - `GET /api/v1/files` - List files
 - `DELETE /api/v1/files/:id` - Delete file
 
-### AI Generation (4 endpoints)
+### AI Generation (5 endpoints)
 - `POST /api/v1/ai/generate-quiz-from-text` - Generate from text
 - `POST /api/v1/ai/generate-quiz-from-file` - Generate from file
+- `POST /api/v1/ai/extract-quiz-from-image` - Extract from image/PDF 🆕
 - `GET /api/v1/ai/generation-status/:id` - Check generation status
 - `GET /api/v1/ai/jobs` - List generation jobs
 

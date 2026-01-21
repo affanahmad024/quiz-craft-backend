@@ -2,6 +2,47 @@
 
 All notable changes to the QuizCraft Backend will be documented in this file.
 
+## [1.2.0] - 2026-01-21
+
+### Added
+- **AI Quiz Extraction from Images/PDFs**: New endpoint `POST /api/v1/ai/extract-quiz-from-image` to extract quiz structure from uploaded images or PDFs
+  - Upload photo/scan of existing quiz paper
+  - Google Gemini Vision API automatically extracts questions, answers, and correct options
+  - Automatically detects and extracts images embedded in questions
+  - Image compression (75% quality, max 1200x1200px) to optimize storage
+  - Images stored in `/uploads/questions/` directory
+  - Question images accessible via `meta.image_url` field
+  - Supports JPG, PNG, and PDF formats (max 10MB)
+  - Background processing with progress tracking
+  - Estimated processing time: 45 seconds
+
+- **Reference Images Support for Quiz Generation**: Enhanced AI generation endpoints to support reference images
+  - `POST /ai/generate-quiz-from-text` now accepts `reference_images` array
+  - `POST /ai/generate-quiz-from-file` now accepts `reference_images` array
+  - Upload reference images (diagrams, charts, photos) to create visual questions
+  - AI uses images to generate contextual questions
+  - Generated questions automatically include `meta.image_url` where relevant
+  - Supports multiple reference images per generation job
+
+### Technical
+- Added `ImageProcessorService` for image compression and storage
+- Enhanced `AIQuestion` model with `ImageData` field for base64 image handling
+- Updated `GenerationJob` model with `JobType` and `ReferenceImages` fields
+- Added `ExtractQuizFromImage` method in `AIService` using Gemini Vision
+- Added `callGeminiVisionAPIWithMultipleImages` method for reference image support
+- Added `buildPromptWithImages` method for image-aware prompt generation
+- Enhanced `QuizGeneratorService` to process and save question images
+- Updated worker to handle generation, extraction, and reference image loading
+- Enhanced generation endpoints to accept `reference_images` parameter
+- Images served via existing `/api/v1/files/serve/:id` endpoint
+
+### Documentation
+- Added comprehensive AI quiz extraction guide in API_DOCUMENTATION.md
+- Added comprehensive reference images guide in API_DOCUMENTATION.md
+- Updated AI generation endpoints documentation with image support
+- Updated endpoint count (67 total)
+- Added usage examples, workflows, and limitations
+
 ## [1.1.0] - 2026-01-20
 
 ### Added

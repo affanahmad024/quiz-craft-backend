@@ -129,8 +129,9 @@ Access tokens expire after a set period. Use refresh token to get new access tok
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| POST | `/ai/generate-quiz-from-text` | Generate quiz from text | Yes |
-| POST | `/ai/generate-quiz-from-file` | Generate quiz from file | Yes |
+| POST | `/ai/generate-quiz-from-text` | Generate quiz from text (with optional images) 🆕 | Yes |
+| POST | `/ai/generate-quiz-from-file` | Generate quiz from file (with optional images) 🆕 | Yes |
+| POST | `/ai/extract-quiz-from-image` | Extract quiz from image/PDF | Yes |
 | GET | `/ai/generation-status/:id` | Check generation status | Yes |
 | GET | `/ai/jobs` | List generation jobs | Yes |
 
@@ -761,7 +762,289 @@ Visit **`http://localhost:8080/swagger/index.html`** to:
 - Quiz CRUD operations
 - Quiz attempt and scoring
 - AI-powered quiz generation
+- AI quiz extraction from images
 - Search and discovery
 - Templates and sharing
 - Admin dashboard
 - Platform statistics
+
+---
+
+## AI Quiz Extraction from Image/PDF
+
+The new quiz extraction feature allows users to upload a photo or PDF of an existing quiz, and the system will automatically extract the quiz structure, questions, answers, and even images embedded in the questions.
+
+### Extract Quiz from Image/PDF
+
+**Endpoint:** `POST /api/v1/ai/extract-quiz-from-image`
+
+**Description:** Upload an image or PDF containing a quiz, and the system will extract the quiz structure using Google Gemini Vision AI. The extraction process automatically detects questions, answers, correct options, and images associated with questions.
+
+**Request (multipart/form-data):**
+```bash
+curl -X POST http://localhost:8080/api/v1/ai/extract-quiz-from-image \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@quiz_photo.jpg" \
+  -F "extract_images=true"
+```
+
+**Parameters:**
+- `file` (required): Image or PDF file (JPG, PNG, or PDF)
+  - Max size: 10MB
+  - Supported formats: JPEG, PNG, PDF
+- `extract_images` (optional): Whether to extract and attach images from questions
+  - Default: `true`
+  - Values: `true` or `false`
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "message": "Quiz extraction started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "pending",
+    "extract_images": true,
+    "estimated_time_seconds": 45
+  }
+}
+```
+
+**Processing Flow:**
+1. User uploads quiz image/PDF
+2. System creates extraction job (async processing)
+3. Gemini Vision API extracts quiz structure
+4. System detects and extracts images in questions
+5. Images are compressed (quality: 75%, max 1200x1200px)
+6. Images saved to `/uploads/questions/` directory
+7. Quiz created with questions containing `meta.image_url`
+
+**Check Status:**
+```bash
+curl -X GET http://localhost:8080/api/v1/ai/generation-status/{generation_id} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response (Completed):**
+```json
+{
+  "success": true,
+  "data": {
+    "status": "completed",
+    "progress": 100,
+    "quiz_id": "660e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+**Question with Image Example:**
+
+When you retrieve the quiz, questions with images will have the image URL in their `meta` field:
+
+```json
+{
+  "id": "question-1",
+  "question_text": "What animal is shown in the image?",
+  "question_type": "multiple_choice",
+  "points": 1,
+  "meta": {
+    "image_url": "/api/v1/files/serve/abc123-image.jpg",
+    "image_file_id": "abc123"
+  },
+  "answers": [
+    {"answer_text": "Dog", "is_correct": false},
+    {"answer_text": "Cat", "is_correct": true},
+    {"answer_text": "Bird", "is_correct": false},
+    {"answer_text": "Fish", "is_correct": false}
+  ]
+}
+```
+
+**Image Access:**
+
+Images are served via the file serving endpoint:
+```bash
+curl http://localhost:8080/api/v1/files/serve/{image_file_id}
+```
+
+**Features:**
+- ✅ Extracts quiz title and description
+- ✅ Detects all questions and answer options
+- ✅ Identifies correct answers automatically
+- ✅ Extracts images embedded in questions
+- ✅ Compresses images to save storage (75% quality)
+- ✅ Supports multiple question types (multiple choice, true/false)
+- ✅ Maintains question order
+- ✅ Background processing (non-blocking)
+- ✅ Progress tracking
+
+**Use Cases:**
+- Convert paper quizzes to digital format
+- Import quizzes from textbooks (photo/scan)
+- Digitize exam papers
+- Bulk import existing quiz materials
+- Preserve quiz formatting and images
+
+**Limitations:**
+- Max file size: 10MB
+- Supported formats: JPG, PNG, PDF only
+- AI may struggle with poor quality images
+- Handwritten text may not extract accurately
+- Complex layouts may need manual review
+
+---
+
+## AI Quiz Generation with Reference Images
+
+The AI generation endpoints now support **reference images** to create more contextual and visual quizzes. Users can upload reference images (diagrams, charts, photos) that the AI will use to generate relevant questions.
+
+### Generate Quiz from Text with Images
+
+**Endpoint:** `POST /api/v1/ai/generate-quiz-from-text`
+
+**Description:** Generate a quiz from text content, optionally providing reference images that the AI can use to create visual questions.
+
+**Request (JSON):**
+```bash
+curl -X POST http://localhost:8080/api/v1/ai/generate-quiz-from-text \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Photosynthesis is the process by which plants convert light energy into chemical energy...",
+    "reference_images": ["file-id-1", "file-id-2"],
+    "options": {
+      "num_questions": 10,
+      "difficulty": "medium",
+      "question_type": "multiple_choice",
+      "category": "Biology",
+      "language": "en"
+    }
+  }'
+```
+
+**Parameters:**
+- `text` (required): Text content to generate quiz from (100-50,000 characters)
+- `options` (required): Quiz generation options
+- `reference_images` (optional): Array of file IDs for reference images
+  - Upload images first using `/api/v1/files/upload`
+  - Then pass the file IDs in this array
+  - AI will use these images to generate visual questions
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "message": "Quiz generation started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "pending",
+    "estimated_time_seconds": 30,
+    "reference_images_count": 2
+  }
+}
+```
+
+### Generate Quiz from File with Images
+
+**Endpoint:** `POST /api/v1/ai/generate-quiz-from-file`
+
+**Description:** Generate a quiz from an uploaded PDF/DOCX file, with optional reference images.
+
+**Request (JSON):**
+```bash
+curl -X POST http://localhost:8080/api/v1/ai/generate-quiz-from-file \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_id": "abc123-def456-...",
+    "reference_images": ["image-id-1", "image-id-2"],
+    "options": {
+      "num_questions": 15,
+      "difficulty": "hard",
+      "question_type": "mixed",
+      "category": "Science",
+      "language": "en"
+    }
+  }'
+```
+
+**Parameters:**
+- `file_id` (required): ID of uploaded PDF/DOCX file
+- `options` (required): Quiz generation options
+- `reference_images` (optional): Array of file IDs for reference images
+
+### How Reference Images Work
+
+1. **Upload Reference Images:**
+   ```bash
+   curl -X POST http://localhost:8080/api/v1/files/upload \
+     -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+     -F "file=@diagram.jpg"
+   ```
+   Response contains `file_id`
+
+2. **Generate Quiz with Images:**
+   - Include file IDs in `reference_images` array
+   - AI analyzes both text content and images
+   - AI generates questions that reference the images
+
+3. **Generated Questions:**
+   - Some questions will have `image_data` field (base64)
+   - Images are compressed and saved automatically
+   - Questions include `meta.image_url` for accessing images
+
+**Example Generated Question:**
+```json
+{
+  "question_text": "What component is labeled 'A' in the cell diagram?",
+  "question_type": "multiple_choice",
+  "meta": {
+    "image_url": "/api/v1/files/serve/xyz789",
+    "image_file_id": "xyz789"
+  },
+  "answers": [
+    {"answer_text": "Nucleus", "is_correct": true},
+    {"answer_text": "Mitochondria", "is_correct": false},
+    {"answer_text": "Cell wall", "is_correct": false},
+    {"answer_text": "Chloroplast", "is_correct": false}
+  ]
+}
+```
+
+### Workflow
+
+```
+1. Upload reference images → Get file IDs
+   POST /files/upload
+
+2. Generate quiz with image references
+   POST /ai/generate-quiz-from-text
+   {
+     "text": "...",
+     "reference_images": ["file-id-1", "file-id-2"]
+   }
+
+3. Check status
+   GET /ai/generation-status/{generation_id}
+
+4. Retrieve generated quiz
+   GET /quizzes/{quiz_id}/full
+
+5. Questions with images have meta.image_url
+```
+
+### Use Cases
+
+- **Educational Content:** Generate quizzes with diagrams from textbooks
+- **Medical Training:** Create questions referencing anatomy images
+- **Technical Documentation:** Quiz users on system architecture diagrams
+- **Visual Learning:** Add context with charts, graphs, or infographics
+- **Language Learning:** Include images for vocabulary questions
+
+### Benefits
+
+- ✅ **Contextual Questions:** AI creates questions based on visual content
+- ✅ **Automatic Image Handling:** Images compressed and stored automatically
+- ✅ **Flexible:** Use images only where relevant
+- ✅ **Same API:** Works with existing generation workflow
+- ✅ **Quality Control:** AI validates image-question relevance

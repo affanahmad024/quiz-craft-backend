@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
@@ -15,12 +16,16 @@ import (
 
 // QuizGeneratorService handles quiz generation from AI responses
 type QuizGeneratorService struct {
-	db *sql.DB
+	db              *sql.DB
+	imageProcessor  *ImageProcessorService
 }
 
 // NewQuizGeneratorService creates a new quiz generator service
 func NewQuizGeneratorService(db *sql.DB) *QuizGeneratorService {
-	return &QuizGeneratorService{db: db}
+	return &QuizGeneratorService{
+		db:             db,
+		imageProcessor: NewImageProcessorService(),
+	}
 }
 
 // CreateQuizFromAIResponse creates a quiz in database from AI response
@@ -76,6 +81,23 @@ func (s *QuizGeneratorService) CreateQuizFromAIResponse(ctx context.Context, aiR
 			Meta:         map[string]interface{}{},
 			CreatedAt:    time.Now(),
 			UpdatedAt:    time.Now(),
+		}
+
+		// Process and save question image if present
+		if aiQuestion.ImageData != "" {
+			commons.Log(ctx, "[services.CreateQuizFromAIResponse [question=%d has_image=true", i+1)
+
+			imageFile, err := s.imageProcessor.ProcessAndSaveImage(ctx, aiQuestion.ImageData, userID, question.ID)
+			if err != nil {
+				commons.LogE(ctx, "[services.CreateQuizFromAIResponse::ImageErr [question_num=%d [err=%v", i+1, err)
+				// Continue without image rather than failing entire quiz
+				commons.Log(ctx, "[services.CreateQuizFromAIResponse [question=%d continuing_without_image", i+1)
+			} else {
+				// Add image URL to question meta
+				question.Meta["image_url"] = fmt.Sprintf("/api/v1/files/serve/%s", imageFile.ID)
+				question.Meta["image_file_id"] = imageFile.ID
+				commons.Log(ctx, "[services.CreateQuizFromAIResponse [question=%d image_saved file_id=%s", i+1, imageFile.ID)
+			}
 		}
 
 		if err := quizdao.CreateQuestion(ctx, question); err != nil {

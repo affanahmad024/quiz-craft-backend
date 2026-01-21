@@ -28,18 +28,20 @@ type FileUpload struct {
 
 // GenerationJob represents an async AI quiz generation job
 type GenerationJob struct {
-	ID           string          `json:"id" db:"id"`
-	UserID       string          `json:"user_id" db:"user_id"`
-	FileID       *string         `json:"file_id,omitempty" db:"file_id"`
-	TextContent  *string         `json:"text_content,omitempty" db:"text_content"`
-	Options      QuizGenOptions  `json:"options" db:"options"` // Stored as JSONB
-	Status       string          `json:"status" db:"status"`   // pending, processing, completed, failed
-	Progress     int             `json:"progress" db:"progress"`
-	QuizID       *string         `json:"quiz_id,omitempty" db:"quiz_id"`
-	ErrorMessage *string         `json:"error_message,omitempty" db:"error_message"`
-	StartedAt    *time.Time      `json:"started_at,omitempty" db:"started_at"`
-	CompletedAt  *time.Time      `json:"completed_at,omitempty" db:"completed_at"`
-	CreatedAt    time.Time       `json:"created_at" db:"created_at"`
+	ID              string          `json:"id" db:"id"`
+	UserID          string          `json:"user_id" db:"user_id"`
+	FileID          *string         `json:"file_id,omitempty" db:"file_id"`
+	TextContent     *string         `json:"text_content,omitempty" db:"text_content"`
+	JobType         string          `json:"job_type" db:"job_type"` // generation, extraction
+	ReferenceImages []string        `json:"reference_images,omitempty" db:"reference_images"` // File IDs of reference images (stored as JSONB)
+	Options         QuizGenOptions  `json:"options" db:"options"`   // Stored as JSONB
+	Status          string          `json:"status" db:"status"`     // pending, processing, completed, failed
+	Progress        int             `json:"progress" db:"progress"`
+	QuizID          *string         `json:"quiz_id,omitempty" db:"quiz_id"`
+	ErrorMessage    *string         `json:"error_message,omitempty" db:"error_message"`
+	StartedAt       *time.Time      `json:"started_at,omitempty" db:"started_at"`
+	CompletedAt     *time.Time      `json:"completed_at,omitempty" db:"completed_at"`
+	CreatedAt       time.Time       `json:"created_at" db:"created_at"`
 }
 
 // AIQuizResponse represents the expected JSON response from Google Gemini AI
@@ -58,6 +60,7 @@ type AIQuestion struct {
 	Points       int        `json:"points"`
 	Explanation  string     `json:"explanation"`
 	Answers      []AIAnswer `json:"answers"`
+	ImageData    string     `json:"image_data,omitempty"` // Base64 encoded image data
 }
 
 // AIAnswer represents a single answer option in the AI response
@@ -68,14 +71,16 @@ type AIAnswer struct {
 
 // GenerateQuizFromTextRequest represents API request for text-based generation
 type GenerateQuizFromTextRequest struct {
-	Text    string         `json:"text" binding:"required,min=100,max=50000"`
-	Options QuizGenOptions `json:"options" binding:"required"`
+	Text           string         `json:"text" binding:"required,min=100,max=50000"`
+	Options        QuizGenOptions `json:"options" binding:"required"`
+	ReferenceImages []string      `json:"reference_images,omitempty"` // File IDs of reference images
 }
 
 // GenerateQuizFromFileRequest represents API request for file-based generation
 type GenerateQuizFromFileRequest struct {
-	FileID  string         `json:"file_id" binding:"required,uuid"`
-	Options QuizGenOptions `json:"options" binding:"required"`
+	FileID          string         `json:"file_id" binding:"required,uuid"`
+	Options         QuizGenOptions `json:"options" binding:"required"`
+	ReferenceImages []string       `json:"reference_images,omitempty"` // File IDs of reference images
 }
 
 // GenerationStatusResponse represents the response for status check
@@ -109,4 +114,9 @@ type ListJobsResponse struct {
 	Total int             `json:"total"`
 	Page  int             `json:"page"`
 	Limit int             `json:"limit"`
+}
+
+// ExtractQuizFromImageRequest represents API request for quiz extraction from image/PDF
+type ExtractQuizFromImageRequest struct {
+	ExtractImages bool `json:"extract_images"` // Whether to extract and attach images from questions
 }

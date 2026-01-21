@@ -150,11 +150,52 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 
 	dao.UpdateJobProgress(ctx, jobUUID, 40)
 
-	// Generate quiz using AI
-	aiResponse, err := w.aiService.GenerateQuizFromText(ctx, content, job.Options)
-	if err != nil {
-		w.failJob(ctx, jobUUID, "AI generation failed: "+err.Error())
-		return
+	// Generate or extract quiz using AI based on job type
+	var aiResponse *model.AIQuizResponse
+	if job.JobType == "extraction" {
+		// Extract quiz from image/PDF using Gemini Vision
+		fileUUID, _ := uuid.Parse(*job.FileID)
+		file, err := dao.GetFileByID(ctx, fileUUID)
+		if err != nil {
+			w.failJob(ctx, jobUUID, "Failed to get file: "+err.Error())
+			return
+		}
+
+		aiResponse, err = w.aiService.ExtractQuizFromImage(ctx, file.FilePath, true)
+		if err != nil {
+			w.failJob(ctx, jobUUID, "AI extraction failed: "+err.Error())
+			return
+		}
+	} else {
+		// Generate quiz from text content (with optional reference images)
+		var referenceImagePaths []string
+
+		// Load reference images if provided
+		if len(job.ReferenceImages) > 0 {
+			commons.Log(ctx, "[worker.ProcessJob [loading_reference_images=%d", len(job.ReferenceImages))
+			for _, fileID := range job.ReferenceImages {
+				imageUUID, err := uuid.Parse(fileID)
+				if err != nil {
+					commons.LogE(ctx, "[worker.ProcessJob::InvalidImageID [file_id=%s [err=%v", fileID, err)
+					continue
+				}
+
+				imageFile, err := dao.GetFileByID(ctx, imageUUID)
+				if err != nil {
+					commons.LogE(ctx, "[worker.ProcessJob::ImageLoadErr [file_id=%s [err=%v", fileID, err)
+					continue
+				}
+
+				referenceImagePaths = append(referenceImagePaths, imageFile.FilePath)
+			}
+			commons.Log(ctx, "[worker.ProcessJob [loaded_images=%d", len(referenceImagePaths))
+		}
+
+		aiResponse, err = w.aiService.GenerateQuizFromText(ctx, content, job.Options, referenceImagePaths)
+		if err != nil {
+			w.failJob(ctx, jobUUID, "AI generation failed: "+err.Error())
+			return
+		}
 	}
 
 	dao.UpdateJobProgress(ctx, jobUUID, 70)
