@@ -343,7 +343,6 @@ func ListUsersAdmin(ctx context.Context, page, limit int, role *string, enabled 
 			u.enabled,
 			u.created_at,
 			u.updated_at,
-			u.last_login_at,
 			COUNT(DISTINCT q.id) as quizzes_created,
 			COUNT(DISTINCT qa.id) as quizzes_taken,
 			COALESCE(AVG(qa.percentage_score) FILTER (WHERE qa.status = 'submitted'), 0) as average_score
@@ -368,7 +367,7 @@ func ListUsersAdmin(ctx context.Context, page, limit int, role *string, enabled 
 	users := []model.AdminUserDetail{}
 	for rows.Next() {
 		var user model.AdminUserDetail
-		var phoneNumber, lastLoginAt sql.NullString
+		var phoneNumber sql.NullString
 
 		err := rows.Scan(
 			&user.ID,
@@ -380,7 +379,6 @@ func ListUsersAdmin(ctx context.Context, page, limit int, role *string, enabled 
 			&user.Enabled,
 			&user.CreatedAt,
 			&user.UpdatedAt,
-			&lastLoginAt,
 			&user.QuizzesCreated,
 			&user.QuizzesTaken,
 			&user.AverageScore,
@@ -392,10 +390,6 @@ func ListUsersAdmin(ctx context.Context, page, limit int, role *string, enabled 
 
 		if phoneNumber.Valid {
 			user.PhoneNumber = &phoneNumber.String
-		}
-		if lastLoginAt.Valid {
-			parsedTime, _ := time.Parse(time.RFC3339, lastLoginAt.String)
-			user.LastLoginAt = &parsedTime
 		}
 
 		users = append(users, user)
@@ -426,7 +420,6 @@ func GetUserDetailAdmin(ctx context.Context, userID uuid.UUID) (*model.AdminUser
 			u.created_at,
 			u.updated_at,
 			u.deleted_at,
-			u.last_login_at,
 			COUNT(DISTINCT q.id) as quizzes_created,
 			COUNT(DISTINCT qa.id) as quizzes_taken,
 			COALESCE(AVG(qa.percentage_score) FILTER (WHERE qa.status = 'submitted'), 0) as average_score
@@ -438,7 +431,7 @@ func GetUserDetailAdmin(ctx context.Context, userID uuid.UUID) (*model.AdminUser
 	`
 
 	var user model.AdminUserDetail
-	var phoneNumber, deletedAt, lastLoginAt sql.NullString
+	var phoneNumber, deletedAt sql.NullString
 
 	err := db.QueryRowContext(ctx, query, userID).Scan(
 		&user.ID,
@@ -451,7 +444,6 @@ func GetUserDetailAdmin(ctx context.Context, userID uuid.UUID) (*model.AdminUser
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&deletedAt,
-		&lastLoginAt,
 		&user.QuizzesCreated,
 		&user.QuizzesTaken,
 		&user.AverageScore,
@@ -470,10 +462,6 @@ func GetUserDetailAdmin(ctx context.Context, userID uuid.UUID) (*model.AdminUser
 	if deletedAt.Valid {
 		parsedTime, _ := time.Parse(time.RFC3339, deletedAt.String)
 		user.DeletedAt = &parsedTime
-	}
-	if lastLoginAt.Valid {
-		parsedTime, _ := time.Parse(time.RFC3339, lastLoginAt.String)
-		user.LastLoginAt = &parsedTime
 	}
 
 	return &user, nil

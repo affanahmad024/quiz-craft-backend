@@ -59,7 +59,7 @@ func FindByID(ctx context.Context, id uuid.UUID) (model.UserDAO, error) {
 	commons.Log(ctx, "[dao.FindByID [id=%s", id)
 
 	user := model.UserDAO{}
-	qry := `SELECT id, email, name, phone_number, role, email_verified, enabled, created_at, updated_at, deleted_at, last_login_at, meta
+	qry := `SELECT id, email, name, phone_number, role, email_verified, enabled, created_at, updated_at, deleted_at, meta
 			FROM users
 			WHERE id = $1 AND deleted_at IS NULL`
 
@@ -74,7 +74,6 @@ func FindByID(ctx context.Context, id uuid.UUID) (model.UserDAO, error) {
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.DeletedAt,
-		&user.LastLoginAt,
 		&user.Meta,
 	)
 
