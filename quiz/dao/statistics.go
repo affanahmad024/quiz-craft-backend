@@ -113,7 +113,7 @@ func SearchQuizzes(ctx context.Context, input model.SearchQuizzesInput, userID *
 			COALESCE(AVG(qa.percentage) FILTER (WHERE qa.status = 'submitted'), 0) as average_score
 		FROM quizzes q
 		LEFT JOIN users u ON q.creator_id = u.id
-		LEFT JOIN questions ques ON q.id = ques.quiz_id AND ques.deleted_at IS NULL
+		LEFT JOIN questions ques ON q.id = ques.quiz_id
 		LEFT JOIN quiz_attempts qa ON q.id = qa.quiz_id
 		WHERE %s
 		GROUP BY q.id, u.id, u.name
@@ -357,7 +357,7 @@ func GetQuestionStats(ctx context.Context, quizID uuid.UUID) ([]model.QuestionSt
 			COALESCE(AVG(CASE WHEN ua.is_correct THEN 100.0 ELSE 0.0 END), 0) as success_rate
 		FROM questions q
 		LEFT JOIN user_answers ua ON q.id = ua.question_id
-		WHERE q.quiz_id = $1 AND q.deleted_at IS NULL
+		WHERE q.quiz_id = $1
 		GROUP BY q.id, q.question_text
 		ORDER BY q.order_index
 	`
