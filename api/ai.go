@@ -349,9 +349,9 @@ func ListJobs(c *gin.Context) {
 	commons.RespOK(c, response)
 }
 
-// ExtractQuizFromImage extracts quiz from uploaded image/PDF
-// POST /api/v1/ai/extract-quiz-from-image
-func ExtractQuizFromImage(c *gin.Context) {
+// ExtractQuizFromFile extracts existing quiz questions from uploaded file (image/PDF)
+// POST /api/v1/ai/extract-quiz-from-file
+func ExtractQuizFromFile(c *gin.Context) {
 	ctx := commons.Ctx(c)
 
 	userID, ok := commons.UsrID(ctx)
@@ -360,12 +360,12 @@ func ExtractQuizFromImage(c *gin.Context) {
 		return
 	}
 
-	commons.Log(ctx, "[api.ExtractQuizFromImage [user_id=%s", userID)
+	commons.Log(ctx, "[api.ExtractQuizFromFile [user_id=%s", userID)
 
 	// Get file from request
 	file, fileHeader, err := c.Request.FormFile("file")
 	if err != nil {
-		commons.LogE(ctx, "[api.ExtractQuizFromImage::FormFileErr [err=%v", err)
+		commons.LogE(ctx, "[api.ExtractQuizFromFile::FormFileErr [err=%v", err)
 		commons.RespBadReq(c, "file is required")
 		return
 	}

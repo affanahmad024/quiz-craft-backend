@@ -246,9 +246,9 @@ func initExt() {
 	aiGroup := v1.Group("/ai")
 	aiGroup.Use(middleware.Auth(jwtManager))
 	{
-		aiGroup.POST("/generate-quiz-from-text", api.GenerateQuizFromText)   // Generate from text
-		aiGroup.POST("/generate-quiz-from-file", api.GenerateQuizFromFile)   // Generate from file
-		aiGroup.POST("/extract-quiz-from-image", api.ExtractQuizFromImage)   // Extract from image/PDF
+		aiGroup.POST("/generate-quiz-from-text", api.GenerateQuizFromText)   // Generate new questions from text
+		aiGroup.POST("/generate-quiz-from-file", api.GenerateQuizFromFile)   // Generate new questions from file
+		aiGroup.POST("/extract-quiz-from-file", api.ExtractQuizFromFile)     // Extract existing questions from file (image/PDF)
 		aiGroup.GET("/generation-status/:id", api.GetGenerationStatus)       // Check status
 		aiGroup.GET("/jobs", api.ListJobs)                                   // List jobs
 	}

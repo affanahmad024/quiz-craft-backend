@@ -5,8 +5,8 @@ All notable changes to the QuizCraft Backend will be documented in this file.
 ## [1.2.0] - 2026-01-21
 
 ### Added
-- **AI Quiz Extraction from Images/PDFs**: New endpoint `POST /api/v1/ai/extract-quiz-from-image` to extract quiz structure from uploaded images or PDFs
-  - Upload photo/scan of existing quiz paper
+- **AI Quiz Extraction from Files**: New endpoint `POST /api/v1/ai/extract-quiz-from-file` to extract existing quiz questions from uploaded images or PDFs
+  - Upload photo/scan of existing quiz paper with written questions
   - Google Gemini Vision API automatically extracts questions, answers, and correct options
   - Automatically detects and extracts images embedded in questions
   - Image compression (75% quality, max 1200x1200px) to optimize storage
@@ -15,12 +15,13 @@ All notable changes to the QuizCraft Backend will be documented in this file.
   - Supports JPG, PNG, and PDF formats (max 10MB)
   - Background processing with progress tracking
   - Estimated processing time: 45 seconds
+  - **Note:** This extracts existing questions, unlike generation endpoints which create new questions
 
-- **Reference Images Support for Quiz Generation**: Enhanced AI generation endpoints to support reference images
+- **Reference Images Support for Quiz Generation**: Enhanced AI generation endpoints to support reference images for creating new questions
   - `POST /ai/generate-quiz-from-text` now accepts `reference_images` array
   - `POST /ai/generate-quiz-from-file` now accepts `reference_images` array
   - Upload reference images (diagrams, charts, photos) to create visual questions
-  - AI uses images to generate contextual questions
+  - AI uses images to generate new contextual questions
   - Generated questions automatically include `meta.image_url` where relevant
   - Supports multiple reference images per generation job
 

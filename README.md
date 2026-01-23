@@ -319,9 +319,9 @@ backend/
 - `DELETE /api/v1/files/:id` - Delete file
 
 ### AI Generation (5 endpoints)
-- `POST /api/v1/ai/generate-quiz-from-text` - Generate from text
-- `POST /api/v1/ai/generate-quiz-from-file` - Generate from file
-- `POST /api/v1/ai/extract-quiz-from-image` - Extract from image/PDF 🆕
+- `POST /api/v1/ai/generate-quiz-from-text` - Generate new questions from text
+- `POST /api/v1/ai/generate-quiz-from-file` - Generate new questions from file
+- `POST /api/v1/ai/extract-quiz-from-file` - Extract existing questions from file (image/PDF) 🆕
 - `GET /api/v1/ai/generation-status/:id` - Check generation status
 - `GET /api/v1/ai/jobs` - List generation jobs
 

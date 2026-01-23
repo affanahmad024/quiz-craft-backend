@@ -129,9 +129,9 @@ Access tokens expire after a set period. Use refresh token to get new access tok
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| POST | `/ai/generate-quiz-from-text` | Generate quiz from text (with optional images) 🆕 | Yes |
-| POST | `/ai/generate-quiz-from-file` | Generate quiz from file (with optional images) 🆕 | Yes |
-| POST | `/ai/extract-quiz-from-image` | Extract quiz from image/PDF | Yes |
+| POST | `/ai/generate-quiz-from-text` | Generate new questions from text (with optional images) 🆕 | Yes |
+| POST | `/ai/generate-quiz-from-file` | Generate new questions from file (with optional images) 🆕 | Yes |
+| POST | `/ai/extract-quiz-from-file` | Extract existing questions from file (image/PDF) | Yes |
 | GET | `/ai/generation-status/:id` | Check generation status | Yes |
 | GET | `/ai/jobs` | List generation jobs | Yes |
 
@@ -825,15 +825,15 @@ Visit **`http://localhost:8080/swagger/index.html`** to:
 
 The new quiz extraction feature allows users to upload a photo or PDF of an existing quiz, and the system will automatically extract the quiz structure, questions, answers, and even images embedded in the questions.
 
-### Extract Quiz from Image/PDF
+### Extract Quiz from File (Image/PDF)
 
-**Endpoint:** `POST /api/v1/ai/extract-quiz-from-image`
+**Endpoint:** `POST /api/v1/ai/extract-quiz-from-file`
 
-**Description:** Upload an image or PDF containing a quiz, and the system will extract the quiz structure using Google Gemini Vision AI. The extraction process automatically detects questions, answers, correct options, and images associated with questions.
+**Description:** Upload an image or PDF containing existing quiz questions, and the system will extract the quiz structure using Google Gemini Vision AI. The extraction process automatically detects questions, answers, correct options, and images associated with questions. This endpoint is for extracting already-written questions from files, not generating new questions.
 
 **Request (multipart/form-data):**
 ```bash
-curl -X POST http://localhost:8080/api/v1/ai/extract-quiz-from-image \
+curl -X POST http://localhost:8080/api/v1/ai/extract-quiz-from-file \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -F "file=@quiz_photo.jpg" \
   -F "extract_images=true"
