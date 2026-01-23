@@ -469,43 +469,53 @@ func AddQuestion(c *gin.Context) {
 			req.ImageFileID = &imageFileID
 		}
 
-		// Parse form fields
-		req.QuestionText = c.PostForm("question_text")
-		req.QuestionType = c.PostForm("question_type")
-		req.Explanation = c.PostForm("explanation")
-
-		// Parse points
-		if pointsStr := c.PostForm("points"); pointsStr != "" {
-			points, err := strconv.Atoi(pointsStr)
-			if err != nil {
-				commons.RespBadReq(c, "invalid points value")
+		// Check if question_data field exists (JSON string containing all question data)
+		if questionDataJSON := c.PostForm("question_data"); questionDataJSON != "" {
+			// Parse the entire question from JSON
+			if err := json.Unmarshal([]byte(questionDataJSON), &req); err != nil {
+				commons.LogW(ctx, "[api.AddQuestion::QuestionDataParseErr [err=%v", err)
+				commons.RespBadReq(c, "invalid question_data JSON")
 				return
 			}
-			req.Points = points
 		} else {
-			req.Points = 1
-		}
+			// Parse individual form fields (backward compatibility)
+			req.QuestionText = c.PostForm("question_text")
+			req.QuestionType = c.PostForm("question_type")
+			req.Explanation = c.PostForm("explanation")
 
-		// Parse answers JSON if provided
-		if answersJSON := c.PostForm("answers"); answersJSON != "" {
-			var answers []model.AnswerInput
-			if err := json.Unmarshal([]byte(answersJSON), &answers); err != nil {
-				commons.LogW(ctx, "[api.AddQuestion::AnswersParseErr [err=%v", err)
-				commons.RespBadReq(c, "invalid answers JSON")
-				return
+			// Parse points
+			if pointsStr := c.PostForm("points"); pointsStr != "" {
+				points, err := strconv.Atoi(pointsStr)
+				if err != nil {
+					commons.RespBadReq(c, "invalid points value")
+					return
+				}
+				req.Points = points
+			} else {
+				req.Points = 1
 			}
-			req.Answers = answers
-		}
 
-		// Parse meta JSON if provided
-		if metaJSON := c.PostForm("meta"); metaJSON != "" {
-			var meta model.JSONMap
-			if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
-				commons.LogW(ctx, "[api.AddQuestion::MetaParseErr [err=%v", err)
-				commons.RespBadReq(c, "invalid meta JSON")
-				return
+			// Parse answers JSON if provided
+			if answersJSON := c.PostForm("answers"); answersJSON != "" {
+				var answers []model.AnswerInput
+				if err := json.Unmarshal([]byte(answersJSON), &answers); err != nil {
+					commons.LogW(ctx, "[api.AddQuestion::AnswersParseErr [err=%v", err)
+					commons.RespBadReq(c, "invalid answers JSON")
+					return
+				}
+				req.Answers = answers
 			}
-			req.Meta = meta
+
+			// Parse meta JSON if provided
+			if metaJSON := c.PostForm("meta"); metaJSON != "" {
+				var meta model.JSONMap
+				if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
+					commons.LogW(ctx, "[api.AddQuestion::MetaParseErr [err=%v", err)
+					commons.RespBadReq(c, "invalid meta JSON")
+					return
+				}
+				req.Meta = meta
+			}
 		}
 	} else {
 		// Handle JSON (backward compatibility)
@@ -566,10 +576,13 @@ func AddQuestionsBulk(c *gin.Context) {
 
 	// Handle multipart/form-data with optional multiple images
 	if strings.Contains(contentType, "multipart/form-data") {
-		// Parse questions JSON
-		questionsJSON := c.PostForm("questions")
+		// Parse questions JSON - support both "questions" and "questions_data" field names
+		questionsJSON := c.PostForm("questions_data")
 		if questionsJSON == "" {
-			commons.RespBadReq(c, "questions field is required")
+			questionsJSON = c.PostForm("questions")
+		}
+		if questionsJSON == "" {
+			commons.RespBadReq(c, "questions or questions_data field is required")
 			return
 		}
 
@@ -742,36 +755,46 @@ func UpdateQuestion(c *gin.Context) {
 			}
 		}
 
-		// Parse form fields (only update if provided)
-		if questionText := c.PostForm("question_text"); questionText != "" {
-			req.QuestionText = questionText
-		}
-		if questionType := c.PostForm("question_type"); questionType != "" {
-			req.QuestionType = questionType
-		}
-		if explanation := c.PostForm("explanation"); explanation != "" {
-			req.Explanation = &explanation
-		}
-
-		// Parse points if provided
-		if pointsStr := c.PostForm("points"); pointsStr != "" {
-			points, err := strconv.Atoi(pointsStr)
-			if err != nil {
-				commons.RespBadReq(c, "invalid points value")
+		// Check if question_data field exists (JSON string containing all question data)
+		if questionDataJSON := c.PostForm("question_data"); questionDataJSON != "" {
+			// Parse the entire question update from JSON
+			if err := json.Unmarshal([]byte(questionDataJSON), &req); err != nil {
+				commons.LogW(ctx, "[api.UpdateQuestion::QuestionDataParseErr [err=%v", err)
+				commons.RespBadReq(c, "invalid question_data JSON")
 				return
 			}
-			req.Points = &points
-		}
-
-		// Parse meta JSON if provided
-		if metaJSON := c.PostForm("meta"); metaJSON != "" {
-			var meta model.JSONMap
-			if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
-				commons.LogW(ctx, "[api.UpdateQuestion::MetaParseErr [err=%v", err)
-				commons.RespBadReq(c, "invalid meta JSON")
-				return
+		} else {
+			// Parse individual form fields (backward compatibility)
+			if questionText := c.PostForm("question_text"); questionText != "" {
+				req.QuestionText = questionText
 			}
-			req.Meta = meta
+			if questionType := c.PostForm("question_type"); questionType != "" {
+				req.QuestionType = questionType
+			}
+			if explanation := c.PostForm("explanation"); explanation != "" {
+				req.Explanation = &explanation
+			}
+
+			// Parse points if provided
+			if pointsStr := c.PostForm("points"); pointsStr != "" {
+				points, err := strconv.Atoi(pointsStr)
+				if err != nil {
+					commons.RespBadReq(c, "invalid points value")
+					return
+				}
+				req.Points = &points
+			}
+
+			// Parse meta JSON if provided
+			if metaJSON := c.PostForm("meta"); metaJSON != "" {
+				var meta model.JSONMap
+				if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
+					commons.LogW(ctx, "[api.UpdateQuestion::MetaParseErr [err=%v", err)
+					commons.RespBadReq(c, "invalid meta JSON")
+					return
+				}
+				req.Meta = meta
+			}
 		}
 	} else {
 		// Handle JSON (backward compatibility)
