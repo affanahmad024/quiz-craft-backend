@@ -24,19 +24,35 @@ const (
 
 var (
 	AllowedMimeTypes = map[string]bool{
+		// Document types
 		"application/pdf": true,
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
 		"text/plain":     true,
 		"text/markdown":  true,
 		"application/msword": true, // .doc files
+
+		// Image types (for question images)
+		"image/jpeg": true,
+		"image/jpg":  true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/webp": true,
 	}
 
 	AllowedExtensions = map[string]bool{
+		// Document extensions
 		".pdf":  true,
 		".docx": true,
 		".doc":  true,
 		".txt":  true,
 		".md":   true,
+
+		// Image extensions
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".gif":  true,
+		".webp": true,
 	}
 )
 

@@ -1,7 +1,10 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/affanahmad024/quiz-craft/backend/commons"
@@ -424,6 +427,7 @@ func DeleteQuiz(c *gin.Context) {
 }
 
 // AddQuestion adds a question to a quiz
+// Accepts both JSON and multipart/form-data
 func AddQuestion(c *gin.Context) {
 	st := time.Now()
 	ctx := commons.Ctx(c)
@@ -440,10 +444,76 @@ func AddQuestion(c *gin.Context) {
 	quizID := c.Param("id")
 
 	var req model.QuestionInput
-	if err := c.ShouldBindJSON(&req); err != nil {
-		commons.LogW(ctx, "[api.AddQuestion::BindErr [quiz_id=%s [err=%v", quizID, err)
-		commons.RespBadReq(c, "invalid-request-body")
-		return
+	contentType := c.ContentType()
+
+	// Handle multipart/form-data with optional image
+	if strings.Contains(contentType, "multipart/form-data") {
+		// Get optional image file
+		imageFile, imageHeader, _ := c.Request.FormFile("image")
+		if imageFile != nil {
+			defer imageFile.Close()
+
+			// Upload image
+			fileUpload, err := fileUploadService.SaveFile(ctx, imageFile, imageHeader, userID.String())
+			if err != nil {
+				commons.LogE(ctx, "[api.AddQuestion::ImageUploadErr [err=%v", err)
+				if commons.IsBadInput(err) {
+					commons.RespBadReq(c, commons.GetCode(err))
+					return
+				}
+				commons.RespISE(c, err)
+				return
+			}
+
+			imageFileID := fileUpload.ID
+			req.ImageFileID = &imageFileID
+		}
+
+		// Parse form fields
+		req.QuestionText = c.PostForm("question_text")
+		req.QuestionType = c.PostForm("question_type")
+		req.Explanation = c.PostForm("explanation")
+
+		// Parse points
+		if pointsStr := c.PostForm("points"); pointsStr != "" {
+			points, err := strconv.Atoi(pointsStr)
+			if err != nil {
+				commons.RespBadReq(c, "invalid points value")
+				return
+			}
+			req.Points = points
+		} else {
+			req.Points = 1
+		}
+
+		// Parse answers JSON if provided
+		if answersJSON := c.PostForm("answers"); answersJSON != "" {
+			var answers []model.AnswerInput
+			if err := json.Unmarshal([]byte(answersJSON), &answers); err != nil {
+				commons.LogW(ctx, "[api.AddQuestion::AnswersParseErr [err=%v", err)
+				commons.RespBadReq(c, "invalid answers JSON")
+				return
+			}
+			req.Answers = answers
+		}
+
+		// Parse meta JSON if provided
+		if metaJSON := c.PostForm("meta"); metaJSON != "" {
+			var meta model.JSONMap
+			if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
+				commons.LogW(ctx, "[api.AddQuestion::MetaParseErr [err=%v", err)
+				commons.RespBadReq(c, "invalid meta JSON")
+				return
+			}
+			req.Meta = meta
+		}
+	} else {
+		// Handle JSON (backward compatibility)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			commons.LogW(ctx, "[api.AddQuestion::BindErr [quiz_id=%s [err=%v", quizID, err)
+			commons.RespBadReq(c, "invalid-request-body")
+			return
+		}
 	}
 
 	commons.Log(ctx, "[api.AddQuestion [user_id=%s [quiz_id=%s", userID, quizID)
@@ -475,6 +545,7 @@ func AddQuestion(c *gin.Context) {
 }
 
 // AddQuestionsBulk adds multiple questions to a quiz
+// Accepts JSON or multipart/form-data with images named "image_0", "image_1", etc.
 func AddQuestionsBulk(c *gin.Context) {
 	st := time.Now()
 	ctx := commons.Ctx(c)
@@ -491,10 +562,61 @@ func AddQuestionsBulk(c *gin.Context) {
 	quizID := c.Param("id")
 
 	var req model.BulkQuestionsInput
-	if err := c.ShouldBindJSON(&req); err != nil {
-		commons.LogW(ctx, "[api.AddQuestionsBulk::BindErr [quiz_id=%s [err=%v", quizID, err)
-		commons.RespBadReq(c, "invalid-request-body")
-		return
+	contentType := c.ContentType()
+
+	// Handle multipart/form-data with optional multiple images
+	if strings.Contains(contentType, "multipart/form-data") {
+		// Parse questions JSON
+		questionsJSON := c.PostForm("questions")
+		if questionsJSON == "" {
+			commons.RespBadReq(c, "questions field is required")
+			return
+		}
+
+		if err := json.Unmarshal([]byte(questionsJSON), &req.Questions); err != nil {
+			commons.LogW(ctx, "[api.AddQuestionsBulk::QuestionsParseErr [err=%v", err)
+			commons.RespBadReq(c, "invalid questions JSON")
+			return
+		}
+
+		// Upload images and map them to questions by index
+		form, err := c.MultipartForm()
+		if err == nil && form.File != nil {
+			for i := range req.Questions {
+				imageKey := fmt.Sprintf("image_%d", i)
+				if fileHeaders, exists := form.File[imageKey]; exists && len(fileHeaders) > 0 {
+					fileHeader := fileHeaders[0]
+					imageFile, err := fileHeader.Open()
+					if err != nil {
+						commons.LogW(ctx, "[api.AddQuestionsBulk::ImageOpenErr [index=%d [err=%v", i, err)
+						continue
+					}
+
+					// Upload image
+					fileUpload, err := fileUploadService.SaveFile(ctx, imageFile, fileHeader, userID.String())
+					imageFile.Close()
+					if err != nil {
+						commons.LogE(ctx, "[api.AddQuestionsBulk::ImageUploadErr [index=%d [err=%v", i, err)
+						if commons.IsBadInput(err) {
+							commons.RespBadReq(c, fmt.Sprintf("image_%d: %s", i, commons.GetCode(err)))
+							return
+						}
+						commons.RespISE(c, err)
+						return
+					}
+
+					imageFileID := fileUpload.ID
+					req.Questions[i].ImageFileID = &imageFileID
+				}
+			}
+		}
+	} else {
+		// Handle JSON (backward compatibility)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			commons.LogW(ctx, "[api.AddQuestionsBulk::BindErr [quiz_id=%s [err=%v", quizID, err)
+			commons.RespBadReq(c, "invalid-request-body")
+			return
+		}
 	}
 
 	commons.Log(ctx, "[api.AddQuestionsBulk [user_id=%s [quiz_id=%s [count=%d", userID, quizID, len(req.Questions))
@@ -572,6 +694,7 @@ func GetQuestion(c *gin.Context) {
 }
 
 // UpdateQuestion updates a question
+// Accepts both JSON and multipart/form-data with optional image
 func UpdateQuestion(c *gin.Context) {
 	st := time.Now()
 	ctx := commons.Ctx(c)
@@ -588,10 +711,75 @@ func UpdateQuestion(c *gin.Context) {
 	questionID := c.Param("qid")
 
 	var req model.QuestionUpdateInput
-	if err := c.ShouldBindJSON(&req); err != nil {
-		commons.LogW(ctx, "[api.UpdateQuestion::BindErr [question_id=%s [err=%v", questionID, err)
-		commons.RespBadReq(c, "invalid-request-body")
-		return
+	contentType := c.ContentType()
+
+	// Handle multipart/form-data with optional image
+	if strings.Contains(contentType, "multipart/form-data") {
+		// Check for image removal flag
+		if c.PostForm("remove_image") == "true" {
+			emptyStr := ""
+			req.ImageFileID = &emptyStr
+		} else {
+			// Get optional new image file
+			imageFile, imageHeader, _ := c.Request.FormFile("image")
+			if imageFile != nil {
+				defer imageFile.Close()
+
+				// Upload new image
+				fileUpload, err := fileUploadService.SaveFile(ctx, imageFile, imageHeader, userID.String())
+				if err != nil {
+					commons.LogE(ctx, "[api.UpdateQuestion::ImageUploadErr [err=%v", err)
+					if commons.IsBadInput(err) {
+						commons.RespBadReq(c, commons.GetCode(err))
+						return
+					}
+					commons.RespISE(c, err)
+					return
+				}
+
+				imageFileID := fileUpload.ID
+				req.ImageFileID = &imageFileID
+			}
+		}
+
+		// Parse form fields (only update if provided)
+		if questionText := c.PostForm("question_text"); questionText != "" {
+			req.QuestionText = questionText
+		}
+		if questionType := c.PostForm("question_type"); questionType != "" {
+			req.QuestionType = questionType
+		}
+		if explanation := c.PostForm("explanation"); explanation != "" {
+			req.Explanation = &explanation
+		}
+
+		// Parse points if provided
+		if pointsStr := c.PostForm("points"); pointsStr != "" {
+			points, err := strconv.Atoi(pointsStr)
+			if err != nil {
+				commons.RespBadReq(c, "invalid points value")
+				return
+			}
+			req.Points = &points
+		}
+
+		// Parse meta JSON if provided
+		if metaJSON := c.PostForm("meta"); metaJSON != "" {
+			var meta model.JSONMap
+			if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
+				commons.LogW(ctx, "[api.UpdateQuestion::MetaParseErr [err=%v", err)
+				commons.RespBadReq(c, "invalid meta JSON")
+				return
+			}
+			req.Meta = meta
+		}
+	} else {
+		// Handle JSON (backward compatibility)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			commons.LogW(ctx, "[api.UpdateQuestion::BindErr [question_id=%s [err=%v", questionID, err)
+			commons.RespBadReq(c, "invalid-request-body")
+			return
+		}
 	}
 
 	commons.Log(ctx, "[api.UpdateQuestion [user_id=%s [question_id=%s", userID, questionID)

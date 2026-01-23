@@ -19,7 +19,12 @@ var fileUploadService = services.NewFileUploadService()
 // POST /api/v1/files/upload
 func UploadFile(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
 
 	commons.Log(ctx, "[api.UploadFile [user_id=%s", userID)
 
@@ -33,7 +38,7 @@ func UploadFile(c *gin.Context) {
 	defer file.Close()
 
 	// Save file
-	fileUpload, err := fileUploadService.SaveFile(ctx, file, fileHeader, userID)
+	fileUpload, err := fileUploadService.SaveFile(ctx, file, fileHeader, userID.String())
 	if err != nil {
 		if commons.IsBadInput(err) {
 			commons.RespBadReq(c, commons.GetCode(err))
@@ -58,7 +63,12 @@ func UploadFile(c *gin.Context) {
 // GET /api/v1/files?page=1&limit=20
 func ListFiles(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
 
 	commons.Log(ctx, "[api.ListFiles [user_id=%s", userID)
 
@@ -74,13 +84,7 @@ func ListFiles(c *gin.Context) {
 	}
 
 	// Get files
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		commons.RespBadReq(c, "invalid user ID")
-		return
-	}
-
-	files, total, err := dao.ListFilesByUserID(ctx, userUUID, page, limit)
+	files, total, err := dao.ListFilesByUserID(ctx, userID, page, limit)
 	if err != nil {
 		commons.RespISE(c, err)
 		return
@@ -100,12 +104,18 @@ func ListFiles(c *gin.Context) {
 // DELETE /api/v1/files/:id
 func DeleteFile(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
 	fileID := c.Param("id")
 
 	commons.Log(ctx, "[api.DeleteFile [user_id=%s [file_id=%s", userID, fileID)
 
-	if err := fileUploadService.DeleteFile(ctx, fileID, userID); err != nil {
+	if err := fileUploadService.DeleteFile(ctx, fileID, userID.String()); err != nil {
 		if commons.IsNotFound(err) {
 			commons.Resp404(c, commons.GetCode(err))
 			return
@@ -125,7 +135,12 @@ func DeleteFile(c *gin.Context) {
 // POST /api/v1/ai/generate-quiz-from-text
 func GenerateQuizFromText(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
 
 	commons.Log(ctx, "[api.GenerateQuizFromText [user_id=%s", userID)
 
@@ -139,7 +154,7 @@ func GenerateQuizFromText(c *gin.Context) {
 	// Create generation job
 	job := &model.GenerationJob{
 		ID:              uuid.New().String(),
-		UserID:          userID,
+		UserID:          userID.String(),
 		TextContent:     &req.Text,
 		JobType:         "generation",
 		ReferenceImages: req.ReferenceImages,
@@ -171,7 +186,12 @@ func GenerateQuizFromText(c *gin.Context) {
 // POST /api/v1/ai/generate-quiz-from-file
 func GenerateQuizFromFile(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
 
 	commons.Log(ctx, "[api.GenerateQuizFromFile [user_id=%s", userID)
 
@@ -199,7 +219,7 @@ func GenerateQuizFromFile(c *gin.Context) {
 		return
 	}
 
-	if file.UserID != userID {
+	if file.UserID != userID.String() {
 		commons.Resp403(c, "not file owner")
 		return
 	}
@@ -207,7 +227,7 @@ func GenerateQuizFromFile(c *gin.Context) {
 	// Create generation job
 	job := &model.GenerationJob{
 		ID:              uuid.New().String(),
-		UserID:          userID,
+		UserID:          userID.String(),
 		FileID:          &req.FileID,
 		JobType:         "generation",
 		ReferenceImages: req.ReferenceImages,
@@ -239,7 +259,13 @@ func GenerateQuizFromFile(c *gin.Context) {
 // GET /api/v1/ai/generation-status/:id
 func GetGenerationStatus(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
 	jobID := c.Param("id")
 
 	commons.Log(ctx, "[api.GetGenerationStatus [user_id=%s [job_id=%s", userID, jobID)
@@ -261,7 +287,7 @@ func GetGenerationStatus(c *gin.Context) {
 	}
 
 	// Verify ownership
-	if job.UserID != userID {
+	if job.UserID != userID.String() {
 		commons.Resp403(c, "not job owner")
 		return
 	}
@@ -286,7 +312,12 @@ func GetGenerationStatus(c *gin.Context) {
 // GET /api/v1/ai/jobs?page=1&limit=20
 func ListJobs(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
 
 	commons.Log(ctx, "[api.ListJobs [user_id=%s", userID)
 
@@ -302,13 +333,7 @@ func ListJobs(c *gin.Context) {
 	}
 
 	// Get jobs
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		commons.RespBadReq(c, "invalid user ID")
-		return
-	}
-
-	jobs, total, err := dao.ListJobsByUserID(ctx, userUUID, page, limit)
+	jobs, total, err := dao.ListJobsByUserID(ctx, userID, page, limit)
 	if err != nil {
 		commons.RespISE(c, err)
 		return
@@ -328,7 +353,12 @@ func ListJobs(c *gin.Context) {
 // POST /api/v1/ai/extract-quiz-from-image
 func ExtractQuizFromImage(c *gin.Context) {
 	ctx := commons.Ctx(c)
-	userID := c.GetString("user_id")
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
 
 	commons.Log(ctx, "[api.ExtractQuizFromImage [user_id=%s", userID)
 
@@ -366,7 +396,7 @@ func ExtractQuizFromImage(c *gin.Context) {
 	}
 
 	// Save uploaded file temporarily
-	tempFile, err := fileUploadService.SaveFile(ctx, file, fileHeader, userID)
+	tempFile, err := fileUploadService.SaveFile(ctx, file, fileHeader, userID.String())
 	if err != nil {
 		if commons.IsBadInput(err) {
 			commons.RespBadReq(c, commons.GetCode(err))
@@ -379,7 +409,7 @@ func ExtractQuizFromImage(c *gin.Context) {
 	// Create extraction job
 	job := &model.GenerationJob{
 		ID:       uuid.New().String(),
-		UserID:   userID,
+		UserID:   userID.String(),
 		FileID:   &tempFile.ID,
 		JobType:  "extraction",
 		Status:   "pending",
