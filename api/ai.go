@@ -1,7 +1,9 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -129,6 +131,56 @@ func DeleteFile(c *gin.Context) {
 	}
 
 	commons.RespOKWithMsg(c, "File deleted successfully", nil)
+}
+
+// ServeFile serves an uploaded file by ID
+// GET /api/v1/files/serve/:id
+func ServeFile(c *gin.Context) {
+	ctx := commons.Ctx(c)
+
+	// Authentication required but any authenticated user can view files
+	// (needed for quiz images to be viewable by quiz takers)
+	_, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	fileID := c.Param("id")
+	commons.Log(ctx, "[api.ServeFile [file_id=%s", fileID)
+
+	// Get file from database
+	fileUUID, err := uuid.Parse(fileID)
+	if err != nil {
+		commons.RespBadReq(c, "invalid file ID")
+		return
+	}
+
+	file, err := dao.GetFileByID(ctx, fileUUID)
+	if err != nil {
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, "file not found")
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	// Check if file exists on disk
+	if _, err := os.Stat(file.FilePath); os.IsNotExist(err) {
+		commons.LogE(ctx, "[api.ServeFile::FileNotFound [path=%s", file.FilePath)
+		commons.Resp404(c, "file not found on disk")
+		return
+	}
+
+	// Set appropriate headers
+	c.Header("Content-Type", file.MimeType)
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", file.OriginalFilename))
+	c.Header("Cache-Control", "public, max-age=86400") // Cache for 1 day
+
+	// Serve the file
+	c.File(file.FilePath)
+	commons.Log(ctx, "[api.ServeFile::OK [file_id=%s [size=%d", fileID, file.FileSize)
 }
 
 // GenerateQuizFromText generates quiz from text content

@@ -204,7 +204,8 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 
 	// Check if this is adding to existing quiz or creating new one
 	var quizID string
-	isAddition := job.JobType == "addition" && job.QuizID != nil && *job.QuizID != ""
+	// Support both "addition" (from text/file) and "extraction" (from image) when adding to existing quiz
+	isAddition := (job.JobType == "addition" || job.JobType == "extraction") && job.QuizID != nil && *job.QuizID != ""
 
 	// Validate AI response (use appropriate validation based on job type)
 	if isAddition {

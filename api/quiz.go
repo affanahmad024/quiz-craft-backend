@@ -1460,13 +1460,13 @@ func ExtractQuestionsFromFile(c *gin.Context) {
 		return
 	}
 
-	// Create extraction addition job
+	// Create extraction job (will add to existing quiz)
 	job := &aiagentmodel.GenerationJob{
 		ID:       uuid.New().String(),
 		UserID:   userID.String(),
 		QuizID:   &quizID,
 		FileID:   &tempFile.ID,
-		JobType:  "addition",
+		JobType:  "extraction", // Changed from "addition" to "extraction"
 		Status:   "pending",
 		Progress: 0,
 		Options: aiagentmodel.QuizGenOptions{

@@ -243,9 +243,10 @@ func initExt() {
 	files := v1.Group("/files")
 	files.Use(middleware.Auth(jwtManager))
 	{
-		files.POST("/upload", api.UploadFile) // Upload file
-		files.GET("", api.ListFiles)          // List user files
-		files.DELETE("/:id", api.DeleteFile)  // Delete file
+		files.POST("/upload", api.UploadFile)   // Upload file
+		files.GET("", api.ListFiles)            // List user files
+		files.GET("/serve/:id", api.ServeFile)  // Serve/view file by ID
+		files.DELETE("/:id", api.DeleteFile)    // Delete file
 	}
 
 	// AI generation endpoints (protected)
