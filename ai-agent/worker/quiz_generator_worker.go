@@ -121,12 +121,11 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 	// Update progress: 10%
 	dao.UpdateJobProgress(ctx, jobUUID, 10)
 
-	// Get content (either from file or direct text)
-	var content string
-	var err error
-
-	if job.FileID != nil && *job.FileID != "" {
-		// Parse file
+	// Generate or extract quiz using AI based on job type
+	var aiResponse *model.AIQuizResponse
+	if job.JobType == "extraction" {
+		// Extract quiz from image/PDF using Gemini Vision
+		// For extraction, file is an image - skip text parsing
 		fileUUID, _ := uuid.Parse(*job.FileID)
 		file, err := dao.GetFileByID(ctx, fileUUID)
 		if err != nil {
@@ -136,37 +135,40 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 
 		dao.UpdateJobProgress(ctx, jobUUID, 30)
 
-		content, err = w.fileParser.ParseFile(ctx, file.FilePath)
-		if err != nil {
-			w.failJob(ctx, jobUUID, "Failed to parse file: "+err.Error())
-			return
-		}
-	} else if job.TextContent != nil {
-		content = *job.TextContent
-	} else {
-		w.failJob(ctx, jobUUID, "No content provided")
-		return
-	}
-
-	dao.UpdateJobProgress(ctx, jobUUID, 40)
-
-	// Generate or extract quiz using AI based on job type
-	var aiResponse *model.AIQuizResponse
-	if job.JobType == "extraction" {
-		// Extract quiz from image/PDF using Gemini Vision
-		fileUUID, _ := uuid.Parse(*job.FileID)
-		file, err := dao.GetFileByID(ctx, fileUUID)
-		if err != nil {
-			w.failJob(ctx, jobUUID, "Failed to get file: "+err.Error())
-			return
-		}
-
 		aiResponse, err = w.aiService.ExtractQuizFromImage(ctx, file.FilePath, true)
 		if err != nil {
 			w.failJob(ctx, jobUUID, "AI extraction failed: "+err.Error())
 			return
 		}
 	} else {
+		// For generation/addition, get text content from file or direct text
+		var content string
+		var err error
+
+		if job.FileID != nil && *job.FileID != "" {
+			// Parse file to extract text
+			fileUUID, _ := uuid.Parse(*job.FileID)
+			file, err := dao.GetFileByID(ctx, fileUUID)
+			if err != nil {
+				w.failJob(ctx, jobUUID, "Failed to get file: "+err.Error())
+				return
+			}
+
+			dao.UpdateJobProgress(ctx, jobUUID, 30)
+
+			content, err = w.fileParser.ParseFile(ctx, file.FilePath)
+			if err != nil {
+				w.failJob(ctx, jobUUID, "Failed to parse file: "+err.Error())
+				return
+			}
+		} else if job.TextContent != nil {
+			content = *job.TextContent
+		} else {
+			w.failJob(ctx, jobUUID, "No content provided")
+			return
+		}
+
+		dao.UpdateJobProgress(ctx, jobUUID, 40)
 		// Generate quiz from text content (with optional reference images)
 		var referenceImagePaths []string
 

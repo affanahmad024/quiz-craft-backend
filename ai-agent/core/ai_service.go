@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -168,14 +169,22 @@ func (s *AIService) callGeminiVisionAPIWithMultipleImages(ctx context.Context, i
 			continue // Skip this image
 		}
 
-		// Determine image format
-		imageFormat := "image/jpeg"
-		if strings.HasSuffix(strings.ToLower(imagePath), ".png") {
-			imageFormat = "image/png"
+		// Determine image format from file extension
+		// Note: genai.ImageData expects format like "png", "jpeg" NOT "image/png"
+		imageFormat := "jpeg"
+		lowerPath := strings.ToLower(imagePath)
+		if strings.HasSuffix(lowerPath, ".png") {
+			imageFormat = "png"
+		} else if strings.HasSuffix(lowerPath, ".jpg") || strings.HasSuffix(lowerPath, ".jpeg") {
+			imageFormat = "jpeg"
+		} else if strings.HasSuffix(lowerPath, ".gif") {
+			imageFormat = "gif"
+		} else if strings.HasSuffix(lowerPath, ".webp") {
+			imageFormat = "webp"
 		}
 
 		parts = append(parts, genai.ImageData(imageFormat, imageData))
-		commons.Log(ctx, "[core.callGeminiVisionAPIWithMultipleImages [image=%d loaded [size=%d", i, len(imageData))
+		commons.Log(ctx, "[core.callGeminiVisionAPIWithMultipleImages [image=%d loaded [format=%s [size=%d", i, imageFormat, len(imageData))
 	}
 
 	// Generate content
@@ -482,13 +491,23 @@ func (s *AIService) callGeminiVisionAPI(ctx context.Context, imagePath string, p
 		return "", commons.Internal("failed to read image file")
 	}
 
-	// Determine image format
-	imageFormat := "image/jpeg"
-	if strings.HasSuffix(strings.ToLower(imagePath), ".png") {
-		imageFormat = "image/png"
-	} else if strings.HasSuffix(strings.ToLower(imagePath), ".pdf") {
-		imageFormat = "application/pdf"
+	// Determine image format from file extension
+	// Note: genai.ImageData expects format like "png", "jpeg" NOT "image/png"
+	imageFormat := "jpeg"
+	lowerPath := strings.ToLower(imagePath)
+	if strings.HasSuffix(lowerPath, ".png") {
+		imageFormat = "png"
+	} else if strings.HasSuffix(lowerPath, ".jpg") || strings.HasSuffix(lowerPath, ".jpeg") {
+		imageFormat = "jpeg"
+	} else if strings.HasSuffix(lowerPath, ".gif") {
+		imageFormat = "gif"
+	} else if strings.HasSuffix(lowerPath, ".webp") {
+		imageFormat = "webp"
+	} else if strings.HasSuffix(lowerPath, ".pdf") {
+		imageFormat = "pdf"
 	}
+
+	commons.Log(ctx, "[core.callGeminiVisionAPI [image_format=%s [file_ext=%s", imageFormat, filepath.Ext(imagePath))
 
 	// Generate content with image and text
 	resp, err := geminiModel.GenerateContent(ctx,
