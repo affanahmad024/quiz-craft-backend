@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"html/template"
 
@@ -26,6 +27,19 @@ func NewEmailService(cfg *config.EmailConfig) *EmailService {
 		cfg.SMTPUsername,
 		cfg.SMTPPassword,
 	)
+
+	// Configure TLS settings
+	dialer.TLSConfig = &tls.Config{
+		ServerName:         cfg.SMTPHost,
+		InsecureSkipVerify: false,
+	}
+
+	// Port 465 uses implicit SSL, port 587 uses StartTLS (handled automatically by gomail)
+	if cfg.SMTPPort == 465 {
+		dialer.SSL = true
+	}
+
+	logger.GetLogger().Infof("Email service initialized with SMTP host: %s, port: %d", cfg.SMTPHost, cfg.SMTPPort)
 
 	return &EmailService{
 		config: cfg,
@@ -79,6 +93,8 @@ func (s *EmailService) SendPasswordChangedEmail(ctx context.Context, toEmail, to
 
 // sendEmail sends an email
 func (s *EmailService) sendEmail(toEmail, toName, subject, body string) error {
+	logger.GetLogger().Infof("Attempting to send email: from=%s to=%s subject=%s", s.config.FromEmail, toEmail, subject)
+
 	m := gomail.NewMessage()
 
 	// Set sender
@@ -99,7 +115,7 @@ func (s *EmailService) sendEmail(toEmail, toName, subject, body string) error {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 
-	logger.GetLogger().Infof("Email sent successfully to %s", toEmail)
+	logger.GetLogger().Infof("✅ Email ACCEPTED by SMTP server (from=%s to=%s) - Check Mailjet dashboard for delivery status", s.config.FromEmail, toEmail)
 	return nil
 }
 

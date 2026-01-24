@@ -108,6 +108,7 @@ func main() {
 	aiagentdao.InitJobDAO(sqlDB)
 
 	// Initialize Auth Core with dependencies
+	log.Infof("Initializing email service with SMTP: %s:%d", cfg.Email.SMTPHost, cfg.Email.SMTPPort)
 	emailService := services.NewEmailService(&cfg.Email)
 	authcore.Init(jwtManager, emailService)
 

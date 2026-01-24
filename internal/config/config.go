@@ -46,12 +46,12 @@ type JWTConfig struct {
 }
 
 type EmailConfig struct {
-	SMTPHost     string
-	SMTPPort     int
-	SMTPUsername string
-	SMTPPassword string
-	FromEmail    string
-	FromName     string
+	SMTPHost     string `mapstructure:"smtp_host"`
+	SMTPPort     int    `mapstructure:"smtp_port"`
+	SMTPUsername string `mapstructure:"smtp_username"`
+	SMTPPassword string `mapstructure:"smtp_password"`
+	FromEmail    string `mapstructure:"from_email"`
+	FromName     string `mapstructure:"from_name"`
 }
 
 type AppConfig struct {
@@ -193,6 +193,11 @@ func setDefaults() {
 	// JWT defaults
 	viper.SetDefault("jwt.access_token_expire", "24h")
 	viper.SetDefault("jwt.refresh_token_expire", "168h")
+
+	// Email defaults
+	viper.SetDefault("email.smtp_host", "smtp.sendgrid.net")
+	viper.SetDefault("email.smtp_port", 587)
+	viper.SetDefault("email.from_name", "QuizCraft")
 
 	// App defaults
 	viper.SetDefault("app.name", "QuizCraft")
