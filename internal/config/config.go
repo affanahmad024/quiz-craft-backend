@@ -52,6 +52,7 @@ type EmailConfig struct {
 	SMTPPassword string `mapstructure:"smtp_password"`
 	FromEmail    string `mapstructure:"from_email"`
 	FromName     string `mapstructure:"from_name"`
+	FrontendURL  string `mapstructure:"frontend_url"`
 }
 
 type AppConfig struct {
@@ -127,6 +128,7 @@ func Load() (*Config, error) {
 	viper.BindEnv("email.smtp_password", "SMTP_PASSWORD")
 	viper.BindEnv("email.from_email", "SMTP_FROM_EMAIL")
 	viper.BindEnv("email.from_name", "SMTP_FROM_NAME")
+	viper.BindEnv("email.frontend_url", "FRONTEND_URL")
 
 	viper.BindEnv("app.name", "APP_NAME")
 	viper.BindEnv("app.env", "APP_ENV")
@@ -198,6 +200,7 @@ func setDefaults() {
 	viper.SetDefault("email.smtp_host", "smtp.sendgrid.net")
 	viper.SetDefault("email.smtp_port", 587)
 	viper.SetDefault("email.from_name", "QuizCraft")
+	viper.SetDefault("email.frontend_url", "http://localhost:3000")
 
 	// App defaults
 	viper.SetDefault("app.name", "QuizCraft")

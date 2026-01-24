@@ -51,8 +51,8 @@ func NewEmailService(cfg *config.EmailConfig) *EmailService {
 func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, toName, token string, userID uuid.UUID) error {
 	subject := "Verify Your Email - QuizCraft"
 
-	// Create verification link (adjust based on your frontend URL)
-	verificationLink := fmt.Sprintf("http://localhost:3000/verify-email?token=%s&user_id=%s", token, userID.String())
+	// Create verification link using configured frontend URL
+	verificationLink := fmt.Sprintf("%s/verify-email?token=%s&user_id=%s", s.config.FrontendURL, token, userID.String())
 
 	// Email body
 	body := s.renderVerificationEmail(toName, verificationLink)
@@ -64,8 +64,8 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, toNam
 func (s *EmailService) SendPasswordResetEmail(ctx context.Context, toEmail, toName, token string, userID uuid.UUID) error {
 	subject := "Reset Your Password - QuizCraft"
 
-	// Create reset link (adjust based on your frontend URL)
-	resetLink := fmt.Sprintf("http://localhost:3000/reset-password?token=%s&user_id=%s", token, userID.String())
+	// Create reset link using configured frontend URL
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s&user_id=%s", s.config.FrontendURL, token, userID.String())
 
 	// Email body
 	body := s.renderPasswordResetEmail(toName, resetLink)
@@ -234,7 +234,7 @@ func (s *EmailService) renderWelcomeEmail(name string) string {
                 <li>Share quizzes with others</li>
             </ul>
             <div style="text-align: center;">
-                <a href="http://localhost:3000/dashboard" class="button">Go to Dashboard</a>
+                <a href="{{.DashboardURL}}" class="button">Go to Dashboard</a>
             </div>
             <p>If you have any questions, feel free to reach out to our support team.</p>
         </div>
@@ -246,7 +246,8 @@ func (s *EmailService) renderWelcomeEmail(name string) string {
 </html>
 `
 
-	return s.renderTemplate(tmpl, map[string]string{"Name": name})
+	dashboardURL := fmt.Sprintf("%s/dashboard", s.config.FrontendURL)
+	return s.renderTemplate(tmpl, map[string]string{"Name": name, "DashboardURL": dashboardURL})
 }
 
 // renderPasswordChangedEmail renders the password changed notification email
