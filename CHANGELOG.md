@@ -2,6 +2,42 @@
 
 All notable changes to the QuizCraft Backend will be documented in this file.
 
+## [1.3.1] - 2026-01-24
+
+### Fixed
+- **Add to Existing Quiz Functionality**: Fixed critical bugs preventing questions from being added to existing quizzes
+  - Fixed database schema: Added missing `job_type` and `reference_images` columns to `generation_jobs` table
+  - Fixed DAO layer: Updated all job CRUD operations to properly save and retrieve the new columns
+  - Fixed worker logic: Now correctly checks both `addition` and `extraction` job types when adding to existing quiz
+  - Fixed `ExtractQuestionsFromFile` endpoint: Changed job type from "addition" to "extraction" for proper image processing
+  - All "add to existing quiz" endpoints now work correctly and questions are properly added instead of creating new quizzes
+
+- **Image Extraction MIME Type Issue**: Fixed Google Gemini API MIME type error for image extraction
+  - Root cause: `genai.ImageData()` SDK function expects format like "png", "jpeg", not "image/png"
+  - Fixed by passing only the format name (e.g., "png") instead of full MIME type
+  - Image extraction from PNG/JPG files now works correctly
+
+- **File Upload Endpoint Improvements**: Simplified file upload workflow for quiz generation
+  - Changed `AddQuestionsFromFile` endpoint from two-step to one-step process
+  - Now accepts multipart/form-data with file upload and options in a single request
+  - Users no longer need to upload file separately before adding questions
+  - Same improvement applied to `GenerateQuizFromFile` endpoint
+
+### Added
+- **File Serving Endpoint**: New endpoint `GET /api/v1/files/serve/:id` to view uploaded files
+  - Serves files with correct Content-Type for in-browser viewing
+  - Supports all uploaded file types (images, PDFs, documents)
+  - Includes 1-day browser cache for performance
+  - Requires authentication but any authenticated user can view files
+  - Image URLs in questions now work correctly: `/api/v1/files/serve/{file-id}`
+
+### Technical
+- Added database migration `000013_add_job_type_and_reference_images.up.sql`
+- Updated worker to skip text parsing for extraction jobs (images)
+- Added `AddQuestionsToExistingQuiz()` and `ValidateAIQuestionsOnly()` service functions
+- Enhanced DAO layer with proper JSONB handling for `reference_images` array
+- Improved error handling and logging throughout the quiz addition flow
+
 ## [1.3.0] - 2026-01-24
 
 ### Added

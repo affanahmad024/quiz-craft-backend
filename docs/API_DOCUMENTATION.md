@@ -144,6 +144,7 @@ Access tokens expire after a set period. Use refresh token to get new access tok
 |--------|----------|-------------|---------------|
 | POST | `/files/upload` | Upload file | Yes |
 | GET | `/files` | List user files | Yes |
+| GET | `/files/serve/:id` | Serve/view file by ID 🆕 | Yes |
 | DELETE | `/files/:id` | Delete file | Yes |
 
 ### Admin Dashboard
@@ -1171,6 +1172,26 @@ curl -X POST http://localhost:8080/api/v1/quizzes/{quiz_id}/questions \
 }
 ```
 
+**4. Serve/View the Image**
+```bash
+curl -X GET http://localhost:8080/api/v1/files/serve/abc123-def456 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  --output image.jpg
+```
+
+Or directly in a browser (with authentication):
+```
+http://localhost:8080/api/v1/files/serve/abc123-def456
+```
+
+**Features:**
+- ✅ Serves file with correct Content-Type header
+- ✅ Displays inline in browser (not downloaded)
+- ✅ 1-day browser cache for performance
+- ✅ Supports all uploaded file types (images, PDFs, documents)
+- ✅ Requires authentication
+- ✅ Original filename preserved in Content-Disposition header
+
 ### Bulk Questions with Images
 
 Create multiple questions with images in a single transaction:
@@ -1385,22 +1406,29 @@ These endpoints allow you to add AI-generated questions to an **existing quiz** 
 
 **Endpoint:** `POST /api/v1/quizzes/:id/add-questions-from-file`
 
-**Description:** Add AI-generated questions from an uploaded file to an existing quiz. The file must be uploaded first using the file upload endpoint.
+**Description:** Add AI-generated questions from a file to an existing quiz. Supports one-step file upload and quiz generation. Files can be PDF, DOCX, TXT, or images.
 
-**Request (JSON):**
-```json
-{
-  "file_id": "file-uuid-here",
-  "options": {
-    "num_questions": 15,
-    "difficulty": "hard",
-    "question_type": "multiple_choice",
-    "category": "History",
-    "language": "en"
-  },
-  "reference_images": ["ref-img-id-1"]
-}
+**Request (multipart/form-data):**
+```bash
+curl -X POST http://localhost:8080/api/v1/quizzes/349b7777-e983-4056-b830-b0a62cd895da/add-questions-from-file \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@document.pdf" \
+  -F "options[num_questions]=15" \
+  -F "options[difficulty]=hard" \
+  -F "options[question_type]=multiple_choice" \
+  -F "options[category]=History" \
+  -F "options[language]=en" \
+  -F "reference_images[0]=ref-img-id-1"
 ```
+
+**Parameters:**
+- `file` (required) - The file to process (PDF, DOCX, TXT, JPG, PNG)
+- `options[num_questions]` - Number of questions to generate (default: 5)
+- `options[difficulty]` - Difficulty level (easy/medium/hard, default: medium)
+- `options[question_type]` - Type (multiple_choice/true_false/mixed, default: mixed)
+- `options[category]` - Quiz category
+- `options[language]` - Language code (default: en)
+- `reference_images[0..N]` - Optional file IDs for reference images
 
 **Response (202 Accepted):**
 ```json
@@ -1419,8 +1447,9 @@ These endpoints allow you to add AI-generated questions to an **existing quiz** 
 
 **Error Responses:**
 - `401 Unauthorized` - Not authenticated
-- `403 Forbidden` - Not the quiz owner OR not the file owner
-- `404 Not Found` - Quiz or file not found
+- `403 Forbidden` - Not the quiz owner
+- `404 Not Found` - Quiz not found
+- `400 Bad Request` - Invalid file type or size (max 10MB)
 
 ### Extract Questions from File to Existing Quiz
 
