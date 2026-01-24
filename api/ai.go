@@ -2,8 +2,8 @@ package api
 
 import (
 	"net/http"
-	"time"
 	"strconv"
+	"time"
 
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/dao"
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
@@ -184,6 +184,7 @@ func GenerateQuizFromText(c *gin.Context) {
 
 // GenerateQuizFromFile generates quiz from uploaded file
 // POST /api/v1/ai/generate-quiz-from-file
+// One-step process: upload file + options in multipart/form-data
 func GenerateQuizFromFile(c *gin.Context) {
 	ctx := commons.Ctx(c)
 
@@ -195,43 +196,68 @@ func GenerateQuizFromFile(c *gin.Context) {
 
 	commons.Log(ctx, "[api.GenerateQuizFromFile [user_id=%s", userID)
 
-	var req model.GenerateQuizFromFileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		commons.LogE(ctx, "[api.GenerateQuizFromFile::BindErr [err=%v", err)
-		commons.RespBadReq(c, "invalid request body")
+	// Get file from request
+	file, fileHeader, err := c.Request.FormFile("file")
+	if err != nil {
+		commons.LogE(ctx, "[api.GenerateQuizFromFile::FormFileErr [err=%v", err)
+		commons.RespBadReq(c, "file is required")
 		return
 	}
+	defer file.Close()
 
-	// Verify file exists and belongs to user
-	fileUUID, err := uuid.Parse(req.FileID)
+	// Save file
+	fileUpload, err := fileUploadService.SaveFile(ctx, file, fileHeader, userID.String())
 	if err != nil {
-		commons.RespBadReq(c, "invalid file ID")
-		return
-	}
-
-	file, err := dao.GetFileByID(ctx, fileUUID)
-	if err != nil {
-		if commons.IsNotFound(err) {
-			commons.Resp404(c, "file not found")
+		commons.LogE(ctx, "[api.GenerateQuizFromFile::SaveFileErr [err=%v", err)
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
 			return
 		}
 		commons.RespISE(c, err)
 		return
 	}
 
-	if file.UserID != userID.String() {
-		commons.Resp403(c, "not file owner")
-		return
+	fileID := fileUpload.ID
+	commons.Log(ctx, "[api.GenerateQuizFromFile [file_uploaded file_id=%s", fileID)
+
+	// Parse options from form fields
+	numQuestions, _ := strconv.Atoi(c.PostForm("options[num_questions]"))
+	if numQuestions == 0 {
+		numQuestions = 10 // Default
 	}
+
+	options := model.QuizGenOptions{
+		NumQuestions: numQuestions,
+		Difficulty:   c.PostForm("options[difficulty]"),
+		QuestionType: c.PostForm("options[question_type]"),
+		Category:     c.PostForm("options[category]"),
+		Language:     c.PostForm("options[language]"),
+	}
+
+	// Validate and set defaults for required fields
+	if options.Difficulty == "" {
+		options.Difficulty = "medium"
+	}
+	if options.QuestionType == "" {
+		options.QuestionType = "mixed"
+	}
+	if options.Category == "" {
+		options.Category = "general"
+	}
+	if options.Language == "" {
+		options.Language = "en"
+	}
+
+	commons.Log(ctx, "[api.GenerateQuizFromFile [options=%+v", options)
 
 	// Create generation job
 	job := &model.GenerationJob{
 		ID:              uuid.New().String(),
 		UserID:          userID.String(),
-		FileID:          &req.FileID,
+		FileID:          &fileID,
 		JobType:         "generation",
-		ReferenceImages: req.ReferenceImages,
-		Options:         req.Options,
+		ReferenceImages: []string{}, // No reference images for now
+		Options:         options,
 		Status:          "pending",
 		Progress:        0,
 		CreatedAt:       time.Now(),
@@ -242,15 +268,17 @@ func GenerateQuizFromFile(c *gin.Context) {
 		return
 	}
 
+	commons.Log(ctx, "[api.GenerateQuizFromFile::OK [job_id=%s [file_id=%s", job.ID, fileID)
+
 	// Return accepted with job ID
 	c.JSON(http.StatusAccepted, commons.APIResponse{
 		Success: true,
 		Message: "Quiz generation started",
 		Data: gin.H{
-			"generation_id":          job.ID,
-			"status":                 "pending",
-			"estimated_time_seconds": 60,
-			"reference_images_count": len(req.ReferenceImages),
+			"generation_id": job.ID,
+			"status":        "pending",
+			"file_id":       fileID,
+			"options":       options,
 		},
 	})
 }

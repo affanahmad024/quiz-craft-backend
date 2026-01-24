@@ -1263,34 +1263,88 @@ func AddQuestionsFromFile(c *gin.Context) {
 		return
 	}
 
-	// Parse request
-	var req aiagentmodel.GenerateQuizFromFileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		commons.LogE(ctx, "[api.AddQuestionsFromFile::BindErr [err=%v", err)
-		commons.RespBadReq(c, "invalid request body")
+	// Get file from multipart request
+	file, fileHeader, err := c.Request.FormFile("file")
+	if err != nil {
+		commons.LogE(ctx, "[api.AddQuestionsFromFile::FormFileErr [err=%v", err)
+		commons.RespBadReq(c, "file is required")
+		return
+	}
+	defer file.Close()
+
+	// Validate file type
+	contentType := fileHeader.Header.Get("Content-Type")
+	validTypes := map[string]bool{
+		"application/pdf":                                           true,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+		"text/plain": true,
+		"image/jpeg": true,
+		"image/jpg":  true,
+		"image/png":  true,
+	}
+
+	if !validTypes[contentType] {
+		commons.RespBadReq(c, "invalid file type. Supported: PDF, DOCX, TXT, JPG, PNG")
 		return
 	}
 
-	// Verify file exists and belongs to user
-	fileUUID, err := uuid.Parse(req.FileID)
-	if err != nil {
-		commons.RespBadReq(c, "invalid file ID")
+	// Validate file size (max 10MB)
+	maxSize := int64(10 * 1024 * 1024)
+	if fileHeader.Size > maxSize {
+		commons.RespBadReq(c, "file size exceeds 10MB limit")
 		return
 	}
 
-	file, err := aiagentdao.GetFileByID(ctx, fileUUID)
+	// Save uploaded file
+	fileUpload, err := quizFileUploadService.SaveFile(ctx, file, fileHeader, userID.String())
 	if err != nil {
-		if commons.IsNotFound(err) {
-			commons.Resp404(c, "file not found")
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
 			return
 		}
 		commons.RespISE(c, err)
 		return
 	}
+	fileID := fileUpload.ID
 
-	if file.UserID != userID.String() {
-		commons.Resp403(c, "not file owner")
-		return
+	// Parse options from form fields
+	numQuestions, _ := strconv.Atoi(c.PostForm("options[num_questions]"))
+	if numQuestions <= 0 {
+		numQuestions = 5 // default
+	}
+
+	difficulty := c.PostForm("options[difficulty]")
+	if difficulty == "" {
+		difficulty = "medium"
+	}
+
+	questionType := c.PostForm("options[question_type]")
+	if questionType == "" {
+		questionType = "mixed"
+	}
+
+	category := c.PostForm("options[category]")
+	language := c.PostForm("options[language]")
+	if language == "" {
+		language = "en"
+	}
+
+	options := aiagentmodel.QuizGenOptions{
+		NumQuestions: numQuestions,
+		Difficulty:   difficulty,
+		QuestionType: questionType,
+		Category:     category,
+		Language:     language,
+	}
+
+	// Parse reference images if provided
+	var referenceImages []string
+	for i := 0; ; i++ {
+		refImageID := c.PostForm(fmt.Sprintf("reference_images[%d]", i))
+		if refImageID == "" {
+			break
+		}
+		referenceImages = append(referenceImages, refImageID)
 	}
 
 	// Create addition job
@@ -1298,10 +1352,10 @@ func AddQuestionsFromFile(c *gin.Context) {
 		ID:              uuid.New().String(),
 		UserID:          userID.String(),
 		QuizID:          &quizID,
-		FileID:          &req.FileID,
+		FileID:          &fileID,
 		JobType:         "addition",
-		ReferenceImages: req.ReferenceImages,
-		Options:         req.Options,
+		ReferenceImages: referenceImages,
+		Options:         options,
 		Status:          "pending",
 		Progress:        0,
 		CreatedAt:       time.Now(),
@@ -1321,7 +1375,7 @@ func AddQuestionsFromFile(c *gin.Context) {
 			"quiz_id":                quizID,
 			"status":                 "pending",
 			"estimated_time_seconds": 60,
-			"reference_images_count": len(req.ReferenceImages),
+			"reference_images_count": len(referenceImages),
 		},
 	})
 }
