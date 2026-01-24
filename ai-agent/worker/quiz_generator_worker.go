@@ -200,19 +200,42 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 
 	dao.UpdateJobProgress(ctx, jobUUID, 70)
 
-	// Validate AI response
-	if err := w.quizGenerator.ValidateAIQuizResponse(aiResponse); err != nil {
-		w.failJob(ctx, jobUUID, "Invalid AI response: "+err.Error())
-		return
+	// Check if this is adding to existing quiz or creating new one
+	var quizID string
+	isAddition := job.JobType == "addition" && job.QuizID != nil && *job.QuizID != ""
+
+	// Validate AI response (use appropriate validation based on job type)
+	if isAddition {
+		if err := w.quizGenerator.ValidateAIQuestionsOnly(aiResponse); err != nil {
+			w.failJob(ctx, jobUUID, "Invalid AI response: "+err.Error())
+			return
+		}
+	} else {
+		if err := w.quizGenerator.ValidateAIQuizResponse(aiResponse); err != nil {
+			w.failJob(ctx, jobUUID, "Invalid AI response: "+err.Error())
+			return
+		}
 	}
 
 	dao.UpdateJobProgress(ctx, jobUUID, 80)
 
-	// Create quiz in database
-	quizID, err := w.quizGenerator.CreateQuizFromAIResponse(ctx, aiResponse, job.UserID, job.Options)
-	if err != nil {
-		w.failJob(ctx, jobUUID, "Failed to create quiz: "+err.Error())
-		return
+	if isAddition {
+		// Add questions to existing quiz
+		commons.Log(ctx, "[worker.ProcessJob [adding_to_existing_quiz=%s", *job.QuizID)
+		if err := w.quizGenerator.AddQuestionsToExistingQuiz(ctx, *job.QuizID, aiResponse, job.UserID); err != nil {
+			w.failJob(ctx, jobUUID, "Failed to add questions: "+err.Error())
+			return
+		}
+		quizID = *job.QuizID
+	} else {
+		// Create new quiz
+		commons.Log(ctx, "[worker.ProcessJob [creating_new_quiz")
+		newQuizID, err := w.quizGenerator.CreateQuizFromAIResponse(ctx, aiResponse, job.UserID, job.Options)
+		if err != nil {
+			w.failJob(ctx, jobUUID, "Failed to create quiz: "+err.Error())
+			return
+		}
+		quizID = newQuizID
 	}
 
 	dao.UpdateJobProgress(ctx, jobUUID, 95)

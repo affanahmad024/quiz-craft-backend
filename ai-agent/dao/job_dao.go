@@ -20,7 +20,7 @@ func InitJobDAO(database *sql.DB) {
 
 // CreateJob creates a new generation job
 func CreateJob(ctx context.Context, job *model.GenerationJob) error {
-	commons.Log(ctx, "[dao.CreateJob [user_id=%s [status=%s", job.UserID, job.Status)
+	commons.Log(ctx, "[dao.CreateJob [user_id=%s [status=%s [job_type=%s", job.UserID, job.Status, job.JobType)
 
 	optionsJSON, err := json.Marshal(job.Options)
 	if err != nil {
@@ -28,11 +28,22 @@ func CreateJob(ctx context.Context, job *model.GenerationJob) error {
 		return err
 	}
 
+	// Marshal reference images to JSON
+	var referenceImagesJSON []byte
+	if len(job.ReferenceImages) > 0 {
+		referenceImagesJSON, err = json.Marshal(job.ReferenceImages)
+		if err != nil {
+			commons.LogE(ctx, "[dao.CreateJob::ReferenceImagesJSONErr [err=%v", err)
+			return err
+		}
+	}
+
 	qry := `INSERT INTO generation_jobs (
-				id, user_id, file_id, text_content, options,
-				status, progress, created_at
+				id, user_id, file_id, text_content, job_type,
+				reference_images, options, status, progress,
+				quiz_id, created_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 			)`
 
 	_, err = jobDB.ExecContext(ctx, qry,
@@ -40,9 +51,12 @@ func CreateJob(ctx context.Context, job *model.GenerationJob) error {
 		job.UserID,
 		job.FileID,
 		job.TextContent,
+		job.JobType,
+		referenceImagesJSON,
 		optionsJSON,
 		job.Status,
 		job.Progress,
+		job.QuizID,
 		job.CreatedAt,
 	)
 
@@ -51,7 +65,7 @@ func CreateJob(ctx context.Context, job *model.GenerationJob) error {
 		return err
 	}
 
-	commons.Log(ctx, "[dao.CreateJob::OK [job_id=%s", job.ID)
+	commons.Log(ctx, "[dao.CreateJob::OK [job_id=%s [job_type=%s [quiz_id=%v", job.ID, job.JobType, job.QuizID)
 	return nil
 }
 
@@ -60,13 +74,15 @@ func GetJobByID(ctx context.Context, id uuid.UUID) (*model.GenerationJob, error)
 	commons.Log(ctx, "[dao.GetJobByID [id=%s", id)
 
 	job := &model.GenerationJob{}
-	qry := `SELECT id, user_id, file_id, text_content, options, status,
-			progress, quiz_id, error_message, started_at, completed_at, created_at
+	qry := `SELECT id, user_id, file_id, text_content, job_type,
+			reference_images, options, status, progress, quiz_id,
+			error_message, started_at, completed_at, created_at
 			FROM generation_jobs
 			WHERE id = $1`
 
 	var fileIDSQL sql.NullString
 	var textContentSQL sql.NullString
+	var referenceImagesJSON []byte
 	var optionsJSON []byte
 	var quizIDSQL sql.NullString
 	var errMsgSQL sql.NullString
@@ -78,6 +94,8 @@ func GetJobByID(ctx context.Context, id uuid.UUID) (*model.GenerationJob, error)
 		&job.UserID,
 		&fileIDSQL,
 		&textContentSQL,
+		&job.JobType,
+		&referenceImagesJSON,
 		&optionsJSON,
 		&job.Status,
 		&job.Progress,
@@ -116,6 +134,15 @@ func GetJobByID(ctx context.Context, id uuid.UUID) (*model.GenerationJob, error)
 		job.CompletedAt = &completedAtSQL.Time
 	}
 
+	// Parse reference images JSON
+	if len(referenceImagesJSON) > 0 {
+		err = json.Unmarshal(referenceImagesJSON, &job.ReferenceImages)
+		if err != nil {
+			commons.LogE(ctx, "[dao.GetJobByID::ReferenceImagesParseErr [err=%v", err)
+			// Don't fail on this, just log
+		}
+	}
+
 	// Parse options JSON
 	if len(optionsJSON) > 0 {
 		err = json.Unmarshal(optionsJSON, &job.Options)
@@ -145,8 +172,9 @@ func ListJobsByUserID(ctx context.Context, userID uuid.UUID, page, limit int) ([
 
 	// Get paginated results
 	offset := (page - 1) * limit
-	qry := `SELECT id, user_id, file_id, text_content, options, status,
-			progress, quiz_id, error_message, started_at, completed_at, created_at
+	qry := `SELECT id, user_id, file_id, text_content, job_type,
+			reference_images, options, status, progress, quiz_id,
+			error_message, started_at, completed_at, created_at
 			FROM generation_jobs
 			WHERE user_id = $1
 			ORDER BY created_at DESC
@@ -163,6 +191,7 @@ func ListJobsByUserID(ctx context.Context, userID uuid.UUID, page, limit int) ([
 		job := &model.GenerationJob{}
 		var fileIDSQL sql.NullString
 		var textContentSQL sql.NullString
+		var referenceImagesJSON []byte
 		var optionsJSON []byte
 		var quizIDSQL sql.NullString
 		var errMsgSQL sql.NullString
@@ -174,6 +203,8 @@ func ListJobsByUserID(ctx context.Context, userID uuid.UUID, page, limit int) ([
 			&job.UserID,
 			&fileIDSQL,
 			&textContentSQL,
+			&job.JobType,
+			&referenceImagesJSON,
 			&optionsJSON,
 			&job.Status,
 			&job.Progress,
@@ -208,6 +239,11 @@ func ListJobsByUserID(ctx context.Context, userID uuid.UUID, page, limit int) ([
 			job.CompletedAt = &completedAtSQL.Time
 		}
 
+		// Parse reference images JSON
+		if len(referenceImagesJSON) > 0 {
+			json.Unmarshal(referenceImagesJSON, &job.ReferenceImages)
+		}
+
 		// Parse options JSON
 		if len(optionsJSON) > 0 {
 			json.Unmarshal(optionsJSON, &job.Options)
@@ -225,8 +261,9 @@ func GetPendingJobs(ctx context.Context, limit int) ([]*model.GenerationJob, err
 	commons.Log(ctx, "[dao.GetPendingJobs [limit=%d", limit)
 
 	jobs := []*model.GenerationJob{}
-	qry := `SELECT id, user_id, file_id, text_content, options, status,
-			progress, quiz_id, error_message, started_at, completed_at, created_at
+	qry := `SELECT id, user_id, file_id, text_content, job_type,
+			reference_images, options, status, progress, quiz_id,
+			error_message, started_at, completed_at, created_at
 			FROM generation_jobs
 			WHERE status = 'pending'
 			ORDER BY created_at ASC
@@ -243,6 +280,7 @@ func GetPendingJobs(ctx context.Context, limit int) ([]*model.GenerationJob, err
 		job := &model.GenerationJob{}
 		var fileIDSQL sql.NullString
 		var textContentSQL sql.NullString
+		var referenceImagesJSON []byte
 		var optionsJSON []byte
 		var quizIDSQL sql.NullString
 		var errMsgSQL sql.NullString
@@ -254,6 +292,8 @@ func GetPendingJobs(ctx context.Context, limit int) ([]*model.GenerationJob, err
 			&job.UserID,
 			&fileIDSQL,
 			&textContentSQL,
+			&job.JobType,
+			&referenceImagesJSON,
 			&optionsJSON,
 			&job.Status,
 			&job.Progress,
@@ -286,6 +326,11 @@ func GetPendingJobs(ctx context.Context, limit int) ([]*model.GenerationJob, err
 		}
 		if completedAtSQL.Valid {
 			job.CompletedAt = &completedAtSQL.Time
+		}
+
+		// Parse reference images JSON
+		if len(referenceImagesJSON) > 0 {
+			json.Unmarshal(referenceImagesJSON, &job.ReferenceImages)
 		}
 
 		// Parse options JSON
