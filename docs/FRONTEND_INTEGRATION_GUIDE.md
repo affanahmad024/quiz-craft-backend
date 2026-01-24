@@ -1977,6 +1977,179 @@ file: <binary file data>
 
 ---
 
+### 65. Add Questions from Text to Existing Quiz
+
+**Endpoint**: `POST /quizzes/:id/add-questions-from-text`
+**Auth Required**: Yes (Quiz Owner)
+**Description**: Add AI-generated questions from text to an existing quiz
+
+**URL Parameters**:
+- `id`: Quiz UUID
+
+**Request Body**:
+```json
+{
+  "text": "Content about history... (min 100, max 50000 characters)",
+  "options": {
+    "num_questions": 10,
+    "difficulty": "medium",
+    "question_type": "mixed",
+    "category": "History",
+    "language": "en"
+  },
+  "reference_images": ["file-id-1", "file-id-2"]
+}
+```
+
+**Success Response** (202 Accepted):
+```json
+{
+  "success": true,
+  "message": "Question addition started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "quiz_id": "349b7777-e983-4056-b830-b0a62cd895da",
+    "status": "pending",
+    "estimated_time_seconds": 30,
+    "reference_images_count": 2
+  }
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Not the quiz owner
+- `404 Not Found` - Quiz not found
+
+**Frontend Implementation**:
+```javascript
+async function addQuestionsFromText(quizId, text, options) {
+  const response = await fetch(`/api/v1/quizzes/${quizId}/add-questions-from-text`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ text, options })
+  });
+
+  const data = await response.json();
+
+  // Poll status
+  const jobId = data.data.generation_id;
+  pollJobStatus(jobId);
+}
+```
+
+---
+
+### 66. Add Questions from File to Existing Quiz
+
+**Endpoint**: `POST /quizzes/:id/add-questions-from-file`
+**Auth Required**: Yes (Quiz Owner)
+**Description**: Add AI-generated questions from uploaded file to an existing quiz
+
+**URL Parameters**:
+- `id`: Quiz UUID
+
+**Request Body**:
+```json
+{
+  "file_id": "file-uuid-here",
+  "options": {
+    "num_questions": 15,
+    "difficulty": "hard",
+    "question_type": "multiple_choice",
+    "category": "Science",
+    "language": "en"
+  },
+  "reference_images": ["ref-img-id-1"]
+}
+```
+
+**Success Response** (202 Accepted):
+```json
+{
+  "success": true,
+  "message": "Question addition started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "quiz_id": "349b7777-e983-4056-b830-b0a62cd895da",
+    "status": "pending",
+    "estimated_time_seconds": 60,
+    "reference_images_count": 1
+  }
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Not the quiz owner OR not the file owner
+- `404 Not Found` - Quiz or file not found
+
+---
+
+### 67. Extract Questions from File to Existing Quiz
+
+**Endpoint**: `POST /quizzes/:id/extract-questions-from-file`
+**Auth Required**: Yes (Quiz Owner)
+**Description**: Extract existing questions from image/PDF and add to an existing quiz
+
+**URL Parameters**:
+- `id`: Quiz UUID
+
+**Request Body** (multipart/form-data):
+- `file`: Image or PDF file (JPG, PNG, PDF; max 10MB)
+- `extract_images`: Whether to extract images (optional, default: true)
+
+**Success Response** (202 Accepted):
+```json
+{
+  "success": true,
+  "message": "Question extraction started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "quiz_id": "349b7777-e983-4056-b830-b0a62cd895da",
+    "status": "pending",
+    "extract_images": true,
+    "estimated_time_seconds": 45
+  }
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Not the quiz owner
+- `404 Not Found` - Quiz not found
+- `400 Bad Request` - Invalid file type or file too large
+
+**Frontend Implementation**:
+```javascript
+async function extractQuestionsFromFile(quizId, file, extractImages = true) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('extract_images', extractImages);
+
+  const response = await fetch(`/api/v1/quizzes/${quizId}/extract-questions-from-file`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`
+    },
+    body: formData
+  });
+
+  const data = await response.json();
+
+  // Poll status
+  const jobId = data.data.generation_id;
+  pollJobStatus(jobId);
+}
+```
+
+**Note**: All three addition endpoints create jobs tracked via `/ai/generation-status/:id`. The `quiz_id` field in the status response indicates which quiz the questions are being added to.
+
+---
+
 ## Error Handling
 
 ### Standard Error Response

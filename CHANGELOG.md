@@ -2,6 +2,26 @@
 
 All notable changes to the QuizCraft Backend will be documented in this file.
 
+## [1.3.0] - 2026-01-24
+
+### Added
+- **AI Question Addition to Existing Quizzes**: New endpoints to add AI-generated questions to existing quizzes instead of creating new ones
+  - `POST /quizzes/:id/add-questions-from-text` - Add AI-generated questions from text to existing quiz
+  - `POST /quizzes/:id/add-questions-from-file` - Add AI-generated questions from uploaded file to existing quiz
+  - `POST /quizzes/:id/extract-questions-from-file` - Extract existing questions from file and add to existing quiz
+  - All endpoints verify quiz ownership before allowing additions
+  - Works with any quiz the user owns (draft or published)
+  - Uses `job_type: "addition"` to distinguish from quiz generation
+  - Returns job ID for status tracking via existing `/ai/generation-status/:id` endpoint
+  - Same request/response format as generation endpoints for consistency
+  - Supports all AI generation options (difficulty, question type, num_questions, etc.)
+
+### Technical
+- Added quiz ownership verification in all addition endpoints
+- Extended job processing to handle `job_type: "addition"` alongside `"generation"` and `"extraction"`
+- Questions added to existing quiz maintain proper `order_index` sequencing
+- Job `quiz_id` field set upfront for addition jobs (vs generated after completion for generation jobs)
+
 ## [1.2.0] - 2026-01-21
 
 ### Added
