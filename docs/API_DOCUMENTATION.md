@@ -90,6 +90,9 @@ Access tokens expire after a set period. Use refresh token to get new access tok
 | POST | `/quizzes/questions/:qid/answers` | Add answer to question | Yes (Creator) |
 | PATCH | `/quizzes/answers/:aid` | Update answer | Yes (Creator) |
 | DELETE | `/quizzes/answers/:aid` | Delete answer | Yes (Creator) |
+| POST | `/quizzes/:id/add-questions-from-text` | Add AI-generated questions from text to existing quiz 🆕 | Yes (Creator) |
+| POST | `/quizzes/:id/add-questions-from-file` | Add AI-generated questions from file to existing quiz 🆕 | Yes (Creator) |
+| POST | `/quizzes/:id/extract-questions-from-file` | Extract and add questions from file to existing quiz 🆕 | Yes (Creator) |
 
 ### Quiz Attempts
 
@@ -1330,3 +1333,160 @@ curl -X PATCH http://localhost:8080/api/v1/quizzes/questions/{question_id} \
 - No specific limit on images per quiz
 - File upload size: Depends on file upload endpoint limits
 - All images must be uploaded before creating questions
+
+---
+
+## AI Question Addition to Existing Quiz
+
+These endpoints allow you to add AI-generated questions to an **existing quiz** instead of creating a new quiz. This is useful when you want to expand an existing quiz with more questions.
+
+### Add Questions from Text to Existing Quiz
+
+**Endpoint:** `POST /api/v1/quizzes/:id/add-questions-from-text`
+
+**Description:** Add AI-generated questions from text content to an existing quiz. The user must own the quiz.
+
+**Request (JSON):**
+```json
+{
+  "text": "Your content here (min 100, max 50000 characters)",
+  "options": {
+    "num_questions": 10,
+    "difficulty": "medium",
+    "question_type": "mixed",
+    "category": "Science",
+    "language": "en"
+  },
+  "reference_images": ["file-id-1", "file-id-2"]
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "message": "Question addition started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "quiz_id": "349b7777-e983-4056-b830-b0a62cd895da",
+    "status": "pending",
+    "estimated_time_seconds": 30,
+    "reference_images_count": 2
+  }
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Not the quiz owner
+- `404 Not Found` - Quiz not found
+
+### Add Questions from File to Existing Quiz
+
+**Endpoint:** `POST /api/v1/quizzes/:id/add-questions-from-file`
+
+**Description:** Add AI-generated questions from an uploaded file to an existing quiz. The file must be uploaded first using the file upload endpoint.
+
+**Request (JSON):**
+```json
+{
+  "file_id": "file-uuid-here",
+  "options": {
+    "num_questions": 15,
+    "difficulty": "hard",
+    "question_type": "multiple_choice",
+    "category": "History",
+    "language": "en"
+  },
+  "reference_images": ["ref-img-id-1"]
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "message": "Question addition started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "quiz_id": "349b7777-e983-4056-b830-b0a62cd895da",
+    "status": "pending",
+    "estimated_time_seconds": 60,
+    "reference_images_count": 1
+  }
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Not the quiz owner OR not the file owner
+- `404 Not Found` - Quiz or file not found
+
+### Extract Questions from File to Existing Quiz
+
+**Endpoint:** `POST /api/v1/quizzes/:id/extract-questions-from-file`
+
+**Description:** Extract existing questions from an image or PDF file and add them to an existing quiz. This is for files that already contain written questions, not for generating new questions.
+
+**Request (multipart/form-data):**
+```bash
+curl -X POST http://localhost:8080/api/v1/quizzes/349b7777-e983-4056-b830-b0a62cd895da/extract-questions-from-file \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@quiz_questions.jpg" \
+  -F "extract_images=true"
+```
+
+**Parameters:**
+- `file` (required): Image or PDF file (JPG, PNG, or PDF)
+  - Max size: 10MB
+  - Supported formats: JPEG, PNG, PDF
+- `extract_images` (optional): Whether to extract and attach images from questions
+  - Default: `true`
+  - Values: `true` or `false`
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "message": "Question extraction started",
+  "data": {
+    "generation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "quiz_id": "349b7777-e983-4056-b830-b0a62cd895da",
+    "status": "pending",
+    "extract_images": true,
+    "estimated_time_seconds": 45
+  }
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized` - Not authenticated
+- `403 Forbidden` - Not the quiz owner
+- `404 Not Found` - Quiz not found
+- `400 Bad Request` - Invalid file type or file too large
+
+### Check Addition Status
+
+All three addition endpoints create jobs that can be tracked using the existing status endpoint:
+
+**Endpoint:** `GET /api/v1/ai/generation-status/:id`
+
+The response includes the `quiz_id` field, which will point to the existing quiz where questions are being added:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "completed",
+    "progress": 100,
+    "quiz_id": "349b7777-e983-4056-b830-b0a62cd895da"
+  }
+}
+```
+
+### Job Types
+
+Jobs are distinguished by the `job_type` field:
+- `"generation"` - Creates a **new quiz** with questions
+- `"addition"` - Adds questions to an **existing quiz**
+- `"extraction"` - Extracts questions from file (can be either generation or addition)

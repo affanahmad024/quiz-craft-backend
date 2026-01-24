@@ -3,14 +3,20 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	aiagentdao "github.com/affanahmad024/quiz-craft/backend/ai-agent/dao"
+	aiagentmodel "github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
+	"github.com/affanahmad024/quiz-craft/backend/ai-agent/services"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/core"
+	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/model"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // CreateQuiz creates a new quiz
@@ -1139,4 +1145,301 @@ func GenerateShareLink(c *gin.Context) {
 	commons.Log(ctx, "[api.GenerateShareLink::OK [time_taken=%v [ip=%s [quiz_id=%s [code=%s",
 		time.Since(st), ip, quizID, result.ShareCode)
 	commons.RespOKWithMsg(c, "Share link generated successfully", result)
+}
+
+// Initialize file upload service for AI question addition
+var quizFileUploadService = services.NewFileUploadService()
+
+// AddQuestionsFromText adds AI-generated questions from text to an existing quiz
+// POST /api/v1/quizzes/:id/add-questions-from-text
+func AddQuestionsFromText(c *gin.Context) {
+	ctx := commons.Ctx(c)
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	quizID := c.Param("id")
+	commons.Log(ctx, "[api.AddQuestionsFromText [user_id=%s [quiz_id=%s", userID, quizID)
+
+	// Verify quiz exists and user owns it
+	quizUUID, err := uuid.Parse(quizID)
+	if err != nil {
+		commons.RespBadReq(c, "invalid quiz ID")
+		return
+	}
+
+	quiz, err := quizdao.FindByID(ctx, quizUUID)
+	if err != nil {
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, "quiz not found")
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	if quiz.CreatorID != userID.String() {
+		commons.Resp403(c, "not quiz owner")
+		return
+	}
+
+	// Parse request
+	var req aiagentmodel.GenerateQuizFromTextRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.LogE(ctx, "[api.AddQuestionsFromText::BindErr [err=%v", err)
+		commons.RespBadReq(c, "invalid request body")
+		return
+	}
+
+	// Create addition job
+	job := &aiagentmodel.GenerationJob{
+		ID:              uuid.New().String(),
+		UserID:          userID.String(),
+		QuizID:          &quizID,
+		TextContent:     &req.Text,
+		JobType:         "addition",
+		ReferenceImages: req.ReferenceImages,
+		Options:         req.Options,
+		Status:          "pending",
+		Progress:        0,
+		CreatedAt:       time.Now(),
+	}
+
+	if err := aiagentdao.CreateJob(ctx, job); err != nil {
+		commons.RespISE(c, err)
+		return
+	}
+
+	// Return accepted with job ID
+	c.JSON(http.StatusAccepted, commons.APIResponse{
+		Success: true,
+		Message: "Question addition started",
+		Data: gin.H{
+			"generation_id":          job.ID,
+			"quiz_id":                quizID,
+			"status":                 "pending",
+			"estimated_time_seconds": 30,
+			"reference_images_count": len(req.ReferenceImages),
+		},
+	})
+}
+
+// AddQuestionsFromFile adds AI-generated questions from uploaded file to an existing quiz
+// POST /api/v1/quizzes/:id/add-questions-from-file
+func AddQuestionsFromFile(c *gin.Context) {
+	ctx := commons.Ctx(c)
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	quizID := c.Param("id")
+	commons.Log(ctx, "[api.AddQuestionsFromFile [user_id=%s [quiz_id=%s", userID, quizID)
+
+	// Verify quiz exists and user owns it
+	quizUUID, err := uuid.Parse(quizID)
+	if err != nil {
+		commons.RespBadReq(c, "invalid quiz ID")
+		return
+	}
+
+	quiz, err := quizdao.FindByID(ctx, quizUUID)
+	if err != nil {
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, "quiz not found")
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	if quiz.CreatorID != userID.String() {
+		commons.Resp403(c, "not quiz owner")
+		return
+	}
+
+	// Parse request
+	var req aiagentmodel.GenerateQuizFromFileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.LogE(ctx, "[api.AddQuestionsFromFile::BindErr [err=%v", err)
+		commons.RespBadReq(c, "invalid request body")
+		return
+	}
+
+	// Verify file exists and belongs to user
+	fileUUID, err := uuid.Parse(req.FileID)
+	if err != nil {
+		commons.RespBadReq(c, "invalid file ID")
+		return
+	}
+
+	file, err := aiagentdao.GetFileByID(ctx, fileUUID)
+	if err != nil {
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, "file not found")
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	if file.UserID != userID.String() {
+		commons.Resp403(c, "not file owner")
+		return
+	}
+
+	// Create addition job
+	job := &aiagentmodel.GenerationJob{
+		ID:              uuid.New().String(),
+		UserID:          userID.String(),
+		QuizID:          &quizID,
+		FileID:          &req.FileID,
+		JobType:         "addition",
+		ReferenceImages: req.ReferenceImages,
+		Options:         req.Options,
+		Status:          "pending",
+		Progress:        0,
+		CreatedAt:       time.Now(),
+	}
+
+	if err := aiagentdao.CreateJob(ctx, job); err != nil {
+		commons.RespISE(c, err)
+		return
+	}
+
+	// Return accepted with job ID
+	c.JSON(http.StatusAccepted, commons.APIResponse{
+		Success: true,
+		Message: "Question addition started",
+		Data: gin.H{
+			"generation_id":          job.ID,
+			"quiz_id":                quizID,
+			"status":                 "pending",
+			"estimated_time_seconds": 60,
+			"reference_images_count": len(req.ReferenceImages),
+		},
+	})
+}
+
+// ExtractQuestionsFromFile extracts existing questions from file and adds them to an existing quiz
+// POST /api/v1/quizzes/:id/extract-questions-from-file
+func ExtractQuestionsFromFile(c *gin.Context) {
+	ctx := commons.Ctx(c)
+
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+
+	quizID := c.Param("id")
+	commons.Log(ctx, "[api.ExtractQuestionsFromFile [user_id=%s [quiz_id=%s", userID, quizID)
+
+	// Verify quiz exists and user owns it
+	quizUUID, err := uuid.Parse(quizID)
+	if err != nil {
+		commons.RespBadReq(c, "invalid quiz ID")
+		return
+	}
+
+	quiz, err := quizdao.FindByID(ctx, quizUUID)
+	if err != nil {
+		if commons.IsNotFound(err) {
+			commons.Resp404(c, "quiz not found")
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	if quiz.CreatorID != userID.String() {
+		commons.Resp403(c, "not quiz owner")
+		return
+	}
+
+	// Get file from request
+	file, fileHeader, err := c.Request.FormFile("file")
+	if err != nil {
+		commons.LogE(ctx, "[api.ExtractQuestionsFromFile::FormFileErr [err=%v", err)
+		commons.RespBadReq(c, "file is required")
+		return
+	}
+	defer file.Close()
+
+	// Get extract_images parameter (default: true)
+	extractImages := c.DefaultPostForm("extract_images", "true") == "true"
+
+	// Validate file type (image or PDF)
+	contentType := fileHeader.Header.Get("Content-Type")
+	validTypes := map[string]bool{
+		"image/jpeg":      true,
+		"image/jpg":       true,
+		"image/png":       true,
+		"application/pdf": true,
+	}
+
+	if !validTypes[contentType] {
+		commons.RespBadReq(c, "invalid file type. Only JPG, PNG, and PDF are supported")
+		return
+	}
+
+	// Validate file size (max 10MB)
+	maxSize := int64(10 * 1024 * 1024)
+	if fileHeader.Size > maxSize {
+		commons.RespBadReq(c, "file size exceeds 10MB limit")
+		return
+	}
+
+	// Save uploaded file temporarily
+	tempFile, err := quizFileUploadService.SaveFile(ctx, file, fileHeader, userID.String())
+	if err != nil {
+		if commons.IsBadInput(err) {
+			commons.RespBadReq(c, commons.GetCode(err))
+			return
+		}
+		commons.RespISE(c, err)
+		return
+	}
+
+	// Create extraction addition job
+	job := &aiagentmodel.GenerationJob{
+		ID:       uuid.New().String(),
+		UserID:   userID.String(),
+		QuizID:   &quizID,
+		FileID:   &tempFile.ID,
+		JobType:  "addition",
+		Status:   "pending",
+		Progress: 0,
+		Options: aiagentmodel.QuizGenOptions{
+			NumQuestions: 0, // Will be determined by extraction
+			Difficulty:   "medium",
+			QuestionType: "mixed",
+			Category:     "extracted",
+			Language:     "en",
+		},
+		CreatedAt: time.Now(),
+	}
+
+	if err := aiagentdao.CreateJob(ctx, job); err != nil {
+		commons.RespISE(c, err)
+		return
+	}
+
+	// Return accepted with job ID
+	c.JSON(http.StatusAccepted, commons.APIResponse{
+		Success: true,
+		Message: "Question extraction started",
+		Data: gin.H{
+			"generation_id":          job.ID,
+			"quiz_id":                quizID,
+			"status":                 "pending",
+			"extract_images":         extractImages,
+			"estimated_time_seconds": 45,
+		},
+	})
 }

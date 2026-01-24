@@ -231,6 +231,11 @@ func initExt() {
 		quizzes.POST("/questions/:qid/answers", api.AddAnswer) // Add answer to question
 		quizzes.PATCH("/answers/:aid", api.UpdateAnswer)       // Update answer
 		quizzes.DELETE("/answers/:aid", api.DeleteAnswer)      // Delete answer
+
+		// AI Question Addition (add to existing quiz)
+		quizzes.POST("/:id/add-questions-from-text", api.AddQuestionsFromText)       // Add AI-generated questions from text
+		quizzes.POST("/:id/add-questions-from-file", api.AddQuestionsFromFile)       // Add AI-generated questions from file
+		quizzes.POST("/:id/extract-questions-from-file", api.ExtractQuestionsFromFile) // Extract questions from file and add
 	}
 
 	// File upload endpoints (protected)

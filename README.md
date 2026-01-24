@@ -262,15 +262,18 @@ backend/
 - `POST /api/v1/quizzes/:id/publish` - Publish quiz
 - `POST /api/v1/quizzes/:id/unpublish` - Unpublish quiz
 
-### Questions & Answers (8 endpoints)
+### Questions & Answers (11 endpoints)
 - `POST /api/v1/quizzes/:id/questions` - Add question (with optional answers)
-- `POST /api/v1/quizzes/:id/questions/bulk` - Add multiple questions at once 🆕
+- `POST /api/v1/quizzes/:id/questions/bulk` - Add multiple questions at once
 - `GET /api/v1/quizzes/questions/:qid` - Get question
 - `PATCH /api/v1/quizzes/questions/:qid` - Update question
 - `DELETE /api/v1/quizzes/questions/:qid` - Delete question
 - `POST /api/v1/quizzes/questions/:qid/answers` - Add answer
 - `PATCH /api/v1/quizzes/answers/:aid` - Update answer
 - `DELETE /api/v1/quizzes/answers/:aid` - Delete answer
+- `POST /api/v1/quizzes/:id/add-questions-from-text` - Add AI-generated questions from text 🆕
+- `POST /api/v1/quizzes/:id/add-questions-from-file` - Add AI-generated questions from file 🆕
+- `POST /api/v1/quizzes/:id/extract-questions-from-file` - Extract and add questions from file 🆕
 
 ### Quiz Attempts (6 endpoints)
 - `POST /api/v1/quizzes/:id/attempts` - Start attempt
