@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"html/template"
+	"net/url"
 
 	"github.com/affanahmad024/quiz-craft/backend/internal/config"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
@@ -51,8 +52,11 @@ func NewEmailService(cfg *config.EmailConfig) *EmailService {
 func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, toName, token string, userID uuid.UUID) error {
 	subject := "Verify Your Email - QuizCraft"
 
+	// URL-encode the token to handle special characters safely
+	encodedToken := url.QueryEscape(token)
+
 	// Create verification link using configured frontend URL
-	verificationLink := fmt.Sprintf("%s/verify-email?token=%s&user_id=%s", s.config.FrontendURL, token, userID.String())
+	verificationLink := fmt.Sprintf("%s/verify-email?token=%s&user_id=%s", s.config.FrontendURL, encodedToken, userID.String())
 
 	// Email body
 	body := s.renderVerificationEmail(toName, verificationLink)
@@ -64,8 +68,11 @@ func (s *EmailService) SendVerificationEmail(ctx context.Context, toEmail, toNam
 func (s *EmailService) SendPasswordResetEmail(ctx context.Context, toEmail, toName, token string, userID uuid.UUID) error {
 	subject := "Reset Your Password - QuizCraft"
 
+	// URL-encode the token to handle special characters safely
+	encodedToken := url.QueryEscape(token)
+
 	// Create reset link using configured frontend URL
-	resetLink := fmt.Sprintf("%s/reset-password?token=%s&user_id=%s", s.config.FrontendURL, token, userID.String())
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s&user_id=%s", s.config.FrontendURL, encodedToken, userID.String())
 
 	// Email body
 	body := s.renderPasswordResetEmail(toName, resetLink)
