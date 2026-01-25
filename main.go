@@ -66,7 +66,6 @@ func main() {
 		fmt.Printf("Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
-
 	// Initialize logger
 	logger.Init(cfg.App.LogLevel)
 	log = logger.GetLogger()
@@ -234,8 +233,8 @@ func initExt() {
 		quizzes.DELETE("/answers/:aid", api.DeleteAnswer)      // Delete answer
 
 		// AI Question Addition (add to existing quiz)
-		quizzes.POST("/:id/add-questions-from-text", api.AddQuestionsFromText)       // Add AI-generated questions from text
-		quizzes.POST("/:id/add-questions-from-file", api.AddQuestionsFromFile)       // Add AI-generated questions from file
+		quizzes.POST("/:id/add-questions-from-text", api.AddQuestionsFromText)         // Add AI-generated questions from text
+		quizzes.POST("/:id/add-questions-from-file", api.AddQuestionsFromFile)         // Add AI-generated questions from file
 		quizzes.POST("/:id/extract-questions-from-file", api.ExtractQuestionsFromFile) // Extract questions from file and add
 	}
 
@@ -243,21 +242,21 @@ func initExt() {
 	files := v1.Group("/files")
 	files.Use(middleware.Auth(jwtManager))
 	{
-		files.POST("/upload", api.UploadFile)   // Upload file
-		files.GET("", api.ListFiles)            // List user files
-		files.GET("/serve/:id", api.ServeFile)  // Serve/view file by ID
-		files.DELETE("/:id", api.DeleteFile)    // Delete file
+		files.POST("/upload", api.UploadFile)  // Upload file
+		files.GET("", api.ListFiles)           // List user files
+		files.GET("/serve/:id", api.ServeFile) // Serve/view file by ID
+		files.DELETE("/:id", api.DeleteFile)   // Delete file
 	}
 
 	// AI generation endpoints (protected)
 	aiGroup := v1.Group("/ai")
 	aiGroup.Use(middleware.Auth(jwtManager))
 	{
-		aiGroup.POST("/generate-quiz-from-text", api.GenerateQuizFromText)   // Generate new questions from text
-		aiGroup.POST("/generate-quiz-from-file", api.GenerateQuizFromFile)   // Generate new questions from file
-		aiGroup.POST("/extract-quiz-from-file", api.ExtractQuizFromFile)     // Extract existing questions from file (image/PDF)
-		aiGroup.GET("/generation-status/:id", api.GetGenerationStatus)       // Check status
-		aiGroup.GET("/jobs", api.ListJobs)                                   // List jobs
+		aiGroup.POST("/generate-quiz-from-text", api.GenerateQuizFromText) // Generate new questions from text
+		aiGroup.POST("/generate-quiz-from-file", api.GenerateQuizFromFile) // Generate new questions from file
+		aiGroup.POST("/extract-quiz-from-file", api.ExtractQuizFromFile)   // Extract existing questions from file (image/PDF)
+		aiGroup.GET("/generation-status/:id", api.GetGenerationStatus)     // Check status
+		aiGroup.GET("/jobs", api.ListJobs)                                 // List jobs
 	}
 
 	// Attempt endpoints (protected)
