@@ -1,6 +1,6 @@
 module github.com/affanahmad024/quiz-craft/backend
 
-go 1.25.6
+go 1.24.1
 
 require (
 	github.com/gin-contrib/cors v1.7.6
