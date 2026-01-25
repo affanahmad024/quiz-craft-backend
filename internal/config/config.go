@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -139,6 +140,10 @@ func Load() (*Config, error) {
 
 	viper.BindEnv("google_ai.api_key", "GOOGLE_AI_API_KEY")
 
+	viper.BindEnv("cors.allowed_origins", "CORS_ALLOWED_ORIGINS")
+	viper.BindEnv("cors.allowed_methods", "CORS_ALLOWED_METHODS")
+	viper.BindEnv("cors.allowed_headers", "CORS_ALLOWED_HEADERS")
+
 	// Set defaults
 	setDefaults()
 
@@ -172,6 +177,26 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid rate limit window duration: %w", err)
 	}
 	cfg.RateLimit.Window = rateLimitWindow
+
+	// Parse CORS comma-separated strings from environment variables
+	if corsOrigins := viper.GetString("CORS_ALLOWED_ORIGINS"); corsOrigins != "" {
+		cfg.CORS.AllowedOrigins = strings.Split(corsOrigins, ",")
+		for i := range cfg.CORS.AllowedOrigins {
+			cfg.CORS.AllowedOrigins[i] = strings.TrimSpace(cfg.CORS.AllowedOrigins[i])
+		}
+	}
+	if corsMethods := viper.GetString("CORS_ALLOWED_METHODS"); corsMethods != "" {
+		cfg.CORS.AllowedMethods = strings.Split(corsMethods, ",")
+		for i := range cfg.CORS.AllowedMethods {
+			cfg.CORS.AllowedMethods[i] = strings.TrimSpace(cfg.CORS.AllowedMethods[i])
+		}
+	}
+	if corsHeaders := viper.GetString("CORS_ALLOWED_HEADERS"); corsHeaders != "" {
+		cfg.CORS.AllowedHeaders = strings.Split(corsHeaders, ",")
+		for i := range cfg.CORS.AllowedHeaders {
+			cfg.CORS.AllowedHeaders[i] = strings.TrimSpace(cfg.CORS.AllowedHeaders[i])
+		}
+	}
 
 	// Validate required fields
 	if err := validateConfig(&cfg); err != nil {
