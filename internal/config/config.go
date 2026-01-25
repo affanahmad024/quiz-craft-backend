@@ -104,6 +104,9 @@ func Load() (*Config, error) {
 	viper.AutomaticEnv()
 
 	// Map environment variables to config keys
+	// Bind to PORT first (used by Heroku, Render, Railway, etc.)
+	viper.BindEnv("server.port", "PORT")
+	// Also bind to SERVER_PORT as fallback
 	viper.BindEnv("server.port", "SERVER_PORT")
 	viper.BindEnv("server.host", "SERVER_HOST")
 	viper.BindEnv("server.mode", "GIN_MODE")
