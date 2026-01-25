@@ -221,7 +221,7 @@ func (s *EmailService) renderWelcomeEmail(name string) string {
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
         .header { background-color: #4F46E5; color: white; padding: 20px; text-align: center; }
         .content { background-color: #f9fafb; padding: 30px; }
-        .button { display: inline-block; padding: 12px 24px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+        .button { display: inline-block; padding: 14px 32px; background-color: #10B981; color: white; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; font-size: 16px; }
         .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
     </style>
 </head>
@@ -241,7 +241,7 @@ func (s *EmailService) renderWelcomeEmail(name string) string {
                 <li>Share quizzes with others</li>
             </ul>
             <div style="text-align: center;">
-                <a href="{{.DashboardURL}}" class="button">Go to Dashboard</a>
+                <a href="{{.DashboardURL}}" style="display: inline-block; padding: 14px 32px; background-color: #10B981; color: #ffffff; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; font-size: 16px;">Go to Dashboard</a>
             </div>
             <p>If you have any questions, feel free to reach out to our support team.</p>
         </div>

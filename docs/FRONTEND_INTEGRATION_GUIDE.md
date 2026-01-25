@@ -1,4 +1,5 @@
 # QuizCraft Backend API Integration Guide
+
 ## Complete API Reference for Frontend Integration
 
 **Version**: 1.0
@@ -33,18 +34,22 @@
 ## API Overview
 
 ### Base URL
+
 ```
 Development: http://localhost:8080/api/v1
 Production: https://api.quizcraft.com/api/v1
 ```
 
 ### Authentication Header
+
 ```
 Authorization: Bearer {access_token}
 ```
 
 ### Response Format
+
 All successful responses return JSON:
+
 ```json
 {
   "data": { ... }  // or array for lists
@@ -52,6 +57,7 @@ All successful responses return JSON:
 ```
 
 All error responses return:
+
 ```json
 {
   "error": {
@@ -63,6 +69,7 @@ All error responses return:
 ```
 
 ### HTTP Status Codes
+
 - `200 OK` - Successful GET, PATCH, POST (non-creation)
 - `201 Created` - Successful POST (creation)
 - `204 No Content` - Successful DELETE
@@ -79,22 +86,29 @@ All error responses return:
 ## Authentication
 
 ### Overview
+
 QuizCraft uses JWT (JSON Web Tokens) for authentication. After login, you receive:
+
 - **Access Token**: Short-lived token (24 hours) for API requests
 - **Refresh Token**: Long-lived token (30 days) to get new access tokens
 
 ### Token Storage
+
 **Recommended**: Store in httpOnly cookies (if you control the frontend server)
 **Alternative**: Store in localStorage (easier but less secure)
 
 ### Token Usage
+
 Include in Authorization header for all protected endpoints:
+
 ```
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ### Token Refresh Flow
+
 When access token expires (401 error):
+
 1. Call `/auth/refresh` with refresh token
 2. Get new access token
 3. Retry original request with new token
@@ -110,22 +124,25 @@ When access token expires (401 error):
 **Description**: Register a new user account
 
 **Request Body**:
+
 ```json
 {
   "email": "user@example.com",
   "name": "John Doe",
   "password": "SecurePass123!",
-  "phone_number": "+1234567890"  // optional
+  "phone_number": "+1234567890" // optional
 }
 ```
 
 **Validation Rules**:
+
 - `email`: Valid email format, required
 - `name`: 2-255 characters, required
 - `password`: Minimum 8 characters, required
 - `phone_number`: Optional
 
 **Success Response** (201 Created):
+
 ```json
 {
   "user_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -135,10 +152,12 @@ When access token expires (401 error):
 ```
 
 **Error Responses**:
+
 - `400` - Validation error (weak password, invalid email)
 - `409` - Email already exists
 
 **Example cURL**:
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/signup \
   -H "Content-Type: application/json" \
@@ -158,6 +177,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Verify user email with token received via email
 
 **Request Body**:
+
 ```json
 {
   "user_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -166,6 +186,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "message": "Email verified successfully"
@@ -173,6 +194,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `400` - Invalid or expired token
 
 ---
@@ -184,6 +206,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Resend verification email
 
 **Request Body**:
+
 ```json
 {
   "email": "user@example.com"
@@ -191,6 +214,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "message": "Verification email sent"
@@ -198,6 +222,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `400` - Email already verified
 
 ---
@@ -209,6 +234,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Login and receive access/refresh tokens
 
 **Request Body**:
+
 ```json
 {
   "email": "user@example.com",
@@ -217,6 +243,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -238,6 +265,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `401` - Invalid credentials
 - `401` - Email not verified
 - `401` - Account locked (too many failed attempts)
@@ -252,6 +280,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Get new access token using refresh token
 
 **Request Body**:
+
 ```json
 {
   "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -259,6 +288,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "access_token": "new-access-token",
@@ -270,6 +300,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `401` - Invalid or expired refresh token
 
 ---
@@ -281,6 +312,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Request password reset email
 
 **Request Body**:
+
 ```json
 {
   "email": "user@example.com"
@@ -288,6 +320,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "message": "Password reset email sent if account exists"
@@ -305,6 +338,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Reset password with token from email
 
 **Request Body**:
+
 ```json
 {
   "user_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -314,6 +348,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "message": "Password reset successfully"
@@ -321,6 +356,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `400` - Invalid or expired token
 - `400` - Password too weak
 - `400` - Password recently used (password history check)
@@ -334,6 +370,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Change password when logged in
 
 **Request Body**:
+
 ```json
 {
   "current_password": "SecurePass123!",
@@ -342,6 +379,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "message": "Password changed successfully"
@@ -349,6 +387,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `401` - Invalid current password
 - `400` - Password recently used
 
@@ -363,6 +402,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Request Body**: None
 
 **Success Response** (200 OK):
+
 ```json
 {
   "message": "Logged out successfully"
@@ -380,6 +420,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Get current user's profile
 
 **Success Response** (200 OK):
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -405,6 +446,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Update current user's profile
 
 **Request Body**:
+
 ```json
 {
   "name": "John Updated Doe",
@@ -419,6 +461,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -448,6 +491,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Get current user's statistics
 
 **Success Response** (200 OK):
+
 ```json
 {
   "user_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -481,6 +525,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Create a new quiz
 
 **Request Body**:
+
 ```json
 {
   "title": "JavaScript Fundamentals",
@@ -496,6 +541,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Validation Rules**:
+
 - `title`: 3-255 characters, required
 - `description`: Max 2000 characters
 - `difficulty`: One of: "easy", "medium", "hard"
@@ -504,6 +550,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 - `category`: Max 100 characters
 
 **Success Response** (201 Created):
+
 ```json
 {
   "id": "660e8400-e29b-41d4-a716-446655440000",
@@ -539,9 +586,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Get quiz details (without questions)
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK):
+
 ```json
 {
   "id": "660e8400-e29b-41d4-a716-446655440000",
@@ -551,6 +600,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `404` - Quiz not found
 - `403` - Access denied (private quiz not owned by user)
 
@@ -563,9 +613,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Get quiz with all questions and answers
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK):
+
 ```json
 {
   "id": "660e8400-e29b-41d4-a716-446655440000",
@@ -622,10 +674,12 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: List current user's quizzes
 
 **Query Parameters**:
+
 - `page`: Page number (default: 1)
 - `limit`: Items per page (default: 20, max: 100)
 
 **Success Response** (200 OK):
+
 ```json
 {
   "quizzes": [
@@ -661,6 +715,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: List all published public quizzes
 
 **Query Parameters**:
+
 - `page`: Page number (default: 1)
 - `limit`: Items per page (default: 20, max: 100)
 
@@ -675,9 +730,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Update quiz details
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body** (all fields optional):
+
 ```json
 {
   "title": "Updated Title",
@@ -694,6 +751,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Success Response** (200 OK): Updated quiz object
 
 **Error Responses**:
+
 - `403` - Not the quiz creator
 - `400` - Cannot update published quiz (certain fields)
 
@@ -706,11 +764,13 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Soft delete quiz
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (204 No Content)
 
 **Error Responses**:
+
 - `403` - Not the quiz creator
 
 ---
@@ -722,9 +782,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Publish quiz (make it available for attempts)
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK):
+
 ```json
 {
   "id": "660e8400-e29b-41d4-a716-446655440000",
@@ -735,6 +797,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Error Responses**:
+
 - `403` - Not the quiz creator
 - `400` - Quiz must have at least one question
 
@@ -747,6 +810,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Unpublish quiz
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK): Quiz object with `is_published: false`
@@ -762,9 +826,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Add question to quiz
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body**:
+
 ```json
 {
   "question_text": "What is the output of: console.log(typeof null)?",
@@ -798,6 +864,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Validation Rules**:
+
 - `question_text`: Required, max 1000 characters
 - `question_type`: One of: "multiple_choice", "true_false", "short_answer"
 - `points`: 1-100
@@ -810,6 +877,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
   - At least one answer must be correct
 
 **Success Response** (201 Created):
+
 ```json
 {
   "id": "770e8400-e29b-41d4-a716-446655440000",
@@ -835,6 +903,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Get question with answers
 
 **URL Parameters**:
+
 - `qid`: Question UUID
 
 **Success Response** (200 OK): Question object with answers
@@ -848,9 +917,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Update question
 
 **URL Parameters**:
+
 - `qid`: Question UUID
 
 **Request Body** (all fields optional):
+
 ```json
 {
   "question_text": "Updated question text",
@@ -870,6 +941,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Delete question
 
 **URL Parameters**:
+
 - `qid`: Question UUID
 
 **Success Response** (204 No Content)
@@ -883,9 +955,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Add answer to question
 
 **URL Parameters**:
+
 - `qid`: Question UUID
 
 **Request Body**:
+
 ```json
 {
   "answer_text": "New answer option",
@@ -905,9 +979,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Update answer
 
 **URL Parameters**:
+
 - `aid`: Answer UUID
 
 **Request Body**:
+
 ```json
 {
   "answer_text": "Updated answer text",
@@ -926,6 +1002,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Delete answer
 
 **URL Parameters**:
+
 - `aid`: Answer UUID
 
 **Success Response** (204 No Content)
@@ -941,9 +1018,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Start a new quiz attempt
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body**:
+
 ```json
 {
   "quiz_id": "660e8400-e29b-41d4-a716-446655440000"
@@ -951,6 +1030,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Success Response** (201 Created):
+
 ```json
 {
   "id": "aa0e8400-e29b-41d4-a716-446655440000",
@@ -972,6 +1052,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 **Note**:
+
 - `time_limit_seconds` and `expires_at` only present if quiz has time limit
 - `max_score` is sum of all question points
 - User can have multiple attempts for same quiz
@@ -985,6 +1066,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Get attempt details
 
 **URL Parameters**:
+
 - `id`: Attempt UUID
 
 **Success Response** (200 OK): Attempt object
@@ -998,9 +1080,11 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 **Description**: Submit/update answer for a question
 
 **URL Parameters**:
+
 - `id`: Attempt UUID
 
 **Request Body**:
+
 ```json
 {
   "question_id": "770e8400-e29b-41d4-a716-446655440000",
@@ -1009,6 +1093,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
 ```
 
 For short answer questions:
+
 ```json
 {
   "question_id": "770e8400-e29b-41d4-a716-446655440000",
@@ -1017,6 +1102,7 @@ For short answer questions:
 ```
 
 **Success Response** (201 Created):
+
 ```json
 {
   "id": "bb0e8400-e29b-41d4-a716-446655440000",
@@ -1032,11 +1118,13 @@ For short answer questions:
 ```
 
 **Note**:
+
 - Progressive submission: Can update answer by submitting again for same question (upsert)
 - `is_correct` and `points_earned` calculated immediately for MC/TF
 - Short answer questions require manual grading (Phase 5: not supported)
 
 **Error Responses**:
+
 - `400` - Attempt expired
 - `400` - Attempt already finished
 
@@ -1049,11 +1137,13 @@ For short answer questions:
 **Description**: Finish attempt and calculate final score
 
 **URL Parameters**:
+
 - `id`: Attempt UUID
 
 **Request Body**: None
 
 **Success Response** (200 OK):
+
 ```json
 {
   "id": "aa0e8400-e29b-41d4-a716-446655440000",
@@ -1075,8 +1165,9 @@ For short answer questions:
 ```
 
 **Calculation**:
+
 - `score` = sum of all `points_earned`
-- `percentage` = (score / max_score) * 100
+- `percentage` = (score / max_score) \* 100
 - `passed` = percentage >= passing_score
 
 ---
@@ -1088,9 +1179,11 @@ For short answer questions:
 **Description**: Get full attempt results with correct answers
 
 **URL Parameters**:
+
 - `id`: Attempt UUID
 
 **Success Response** (200 OK):
+
 ```json
 {
   "attempt": {
@@ -1159,12 +1252,14 @@ For short answer questions:
 **Description**: List current user's quiz attempts
 
 **Query Parameters**:
+
 - `page`: Page number (default: 1)
 - `limit`: Items per page (default: 20)
 - `quiz_id`: Filter by quiz (optional)
 - `status`: Filter by status: "in_progress", "submitted", "expired" (optional)
 
 **Success Response** (200 OK):
+
 ```json
 {
   "attempts": [
@@ -1198,6 +1293,7 @@ For short answer questions:
 **Description**: Search and filter public quizzes
 
 **Query Parameters**:
+
 - `q`: Search query (searches in title and description)
 - `category`: Filter by category
 - `difficulty`: Filter by difficulty ("easy", "medium", "hard")
@@ -1210,11 +1306,13 @@ For short answer questions:
 - `limit`: Items per page (default: 20)
 
 **Example**:
+
 ```
 GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=popular&page=1&limit=20
 ```
 
 **Success Response** (200 OK):
+
 ```json
 {
   "quizzes": [
@@ -1273,6 +1371,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get list of all quiz categories
 
 **Success Response** (200 OK):
+
 ```json
 {
   "categories": [
@@ -1295,6 +1394,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get popular tags with usage counts
 
 **Success Response** (200 OK):
+
 ```json
 {
   "tags": [
@@ -1315,6 +1415,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get quiz by share code
 
 **URL Parameters**:
+
 - `code`: Share code (e.g., "ABC123XYZ")
 
 **Success Response** (200 OK): Quiz object
@@ -1330,9 +1431,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get basic quiz statistics
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK):
+
 ```json
 {
   "total_attempts": 230,
@@ -1351,9 +1454,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get detailed quiz statistics
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK):
+
 ```json
 {
   "quiz_id": "660e8400-e29b-41d4-a716-446655440000",
@@ -1399,6 +1504,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: List available quiz templates
 
 **Query Parameters**:
+
 - `page`: Page number (default: 1)
 - `limit`: Items per page (default: 20)
 
@@ -1413,9 +1519,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Save quiz as reusable template
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body**:
+
 ```json
 {
   "template_name": "JavaScript Basics Template",
@@ -1435,9 +1543,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Create new quiz from template
 
 **URL Parameters**:
+
 - `id`: Template UUID
 
 **Request Body**:
+
 ```json
 {
   "title": "My JavaScript Quiz"
@@ -1459,9 +1569,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Generate shareable link for quiz
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK):
+
 ```json
 {
   "share_code": "ABC123XYZ",
@@ -1470,6 +1582,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 ```
 
 **Note**:
+
 - Share code is permanent (no expiration)
 - Increments quiz `share_count`
 - Anyone with link can access quiz
@@ -1487,6 +1600,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: List all users with filters
 
 **Query Parameters**:
+
 - `page`: Page number
 - `limit`: Items per page
 - `role`: Filter by role ("user", "admin")
@@ -1497,6 +1611,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 - `sort_order`: "asc" or "desc"
 
 **Success Response** (200 OK):
+
 ```json
 {
   "users": [
@@ -1530,6 +1645,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get detailed user information
 
 **URL Parameters**:
+
 - `id`: User UUID
 
 **Success Response** (200 OK): Detailed user object with stats
@@ -1543,9 +1659,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Change user role
 
 **URL Parameters**:
+
 - `id`: User UUID
 
 **Request Body**:
+
 ```json
 {
   "role": "admin"
@@ -1565,9 +1683,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Disable user account
 
 **URL Parameters**:
+
 - `id`: User UUID
 
 **Request Body**:
+
 ```json
 {
   "reason": "Violation of terms of service"
@@ -1587,6 +1707,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Enable disabled user account
 
 **URL Parameters**:
+
 - `id`: User UUID
 
 **Success Response** (200 OK): User object with `enabled: true`
@@ -1600,9 +1721,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Permanently delete user (hard delete)
 
 **URL Parameters**:
+
 - `id`: User UUID
 
 **Request Body** (optional):
+
 ```json
 {
   "reason": "User requested account deletion",
@@ -1623,6 +1746,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: List all quizzes with filters
 
 **Query Parameters**: Same as user quiz list plus:
+
 - `is_published`: Filter by published status
 - `creator_id`: Filter by creator
 
@@ -1637,6 +1761,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get detailed quiz information
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Success Response** (200 OK): Full quiz details including creator info
@@ -1650,9 +1775,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Delete quiz (soft or hard delete)
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body**:
+
 ```json
 {
   "reason": "Inappropriate content",
@@ -1671,6 +1798,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get platform-wide statistics
 
 **Success Response** (200 OK):
+
 ```json
 {
   "total_users": 1250,
@@ -1694,9 +1822,11 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get daily user activity timeline
 
 **Query Parameters**:
+
 - `days`: Number of days (1-90, default: 30)
 
 **Success Response** (200 OK):
+
 ```json
 {
   "activity": [
@@ -1728,6 +1858,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Get activity logs (audit trail)
 
 **Query Parameters**:
+
 - `page`: Page number
 - `limit`: Items per page
 - `action`: Filter by action type
@@ -1737,6 +1868,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 - `end_date`: Filter to date
 
 **Success Response** (200 OK):
+
 ```json
 {
   "logs": [
@@ -1774,6 +1906,7 @@ GET /quizzes/search?q=javascript&category=Programming&difficulty=medium&sort_by=
 **Description**: Upload file for AI quiz generation
 
 **Request**: multipart/form-data
+
 ```
 Content-Type: multipart/form-data
 
@@ -1784,6 +1917,7 @@ file: <binary file data>
 **Max File Size**: 10 MB
 
 **Success Response** (201 Created):
+
 ```json
 {
   "file_id": "dd0e8400-e29b-41d4-a716-446655440000",
@@ -1804,6 +1938,7 @@ file: <binary file data>
 **Description**: List user's uploaded files
 
 **Success Response** (200 OK):
+
 ```json
 {
   "files": [
@@ -1829,6 +1964,7 @@ file: <binary file data>
 **Description**: Delete uploaded file
 
 **URL Parameters**:
+
 - `id`: File UUID
 
 **Success Response** (204 No Content)
@@ -1846,6 +1982,7 @@ file: <binary file data>
 **Description**: Generate quiz from text content using AI
 
 **Request Body**:
+
 ```json
 {
   "text": "JavaScript is a high-level, interpreted programming language. It is a language which is also characterized as dynamic, weakly typed, prototype-based and multi-paradigm...",
@@ -1856,6 +1993,7 @@ file: <binary file data>
 ```
 
 **Success Response** (202 Accepted):
+
 ```json
 {
   "job_id": "ee0e8400-e29b-41d4-a716-446655440000",
@@ -1875,6 +2013,7 @@ file: <binary file data>
 **Description**: Generate quiz from uploaded file using AI
 
 **Request Body**:
+
 ```json
 {
   "file_id": "dd0e8400-e29b-41d4-a716-446655440000",
@@ -1895,11 +2034,13 @@ file: <binary file data>
 **Description**: Check AI quiz generation status
 
 **URL Parameters**:
+
 - `id`: Job UUID
 
 **Success Response** (200 OK):
 
 **Pending**:
+
 ```json
 {
   "id": "ee0e8400-e29b-41d4-a716-446655440000",
@@ -1912,6 +2053,7 @@ file: <binary file data>
 ```
 
 **Processing**:
+
 ```json
 {
   "id": "ee0e8400-e29b-41d4-a716-446655440000",
@@ -1922,6 +2064,7 @@ file: <binary file data>
 ```
 
 **Completed**:
+
 ```json
 {
   "id": "ee0e8400-e29b-41d4-a716-446655440000",
@@ -1933,6 +2076,7 @@ file: <binary file data>
 ```
 
 **Failed**:
+
 ```json
 {
   "id": "ee0e8400-e29b-41d4-a716-446655440000",
@@ -1951,11 +2095,13 @@ file: <binary file data>
 **Description**: List user's AI generation jobs
 
 **Query Parameters**:
+
 - `page`: Page number
 - `limit`: Items per page
 - `status`: Filter by status
 
 **Success Response** (200 OK):
+
 ```json
 {
   "jobs": [
@@ -1984,9 +2130,11 @@ file: <binary file data>
 **Description**: Add AI-generated questions from text to an existing quiz
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body**:
+
 ```json
 {
   "text": "Content about history... (min 100, max 50000 characters)",
@@ -2002,6 +2150,7 @@ file: <binary file data>
 ```
 
 **Success Response** (202 Accepted):
+
 ```json
 {
   "success": true,
@@ -2017,21 +2166,26 @@ file: <binary file data>
 ```
 
 **Error Responses**:
+
 - `401 Unauthorized` - Not authenticated
 - `403 Forbidden` - Not the quiz owner
 - `404 Not Found` - Quiz not found
 
 **Frontend Implementation**:
+
 ```javascript
 async function addQuestionsFromText(quizId, text, options) {
-  const response = await fetch(`/api/v1/quizzes/${quizId}/add-questions-from-text`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
+  const response = await fetch(
+    `/api/v1/quizzes/${quizId}/add-questions-from-text`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text, options }),
     },
-    body: JSON.stringify({ text, options })
-  });
+  );
 
   const data = await response.json();
 
@@ -2050,9 +2204,11 @@ async function addQuestionsFromText(quizId, text, options) {
 **Description**: Add AI-generated questions from uploaded file to an existing quiz
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body**:
+
 ```json
 {
   "file_id": "file-uuid-here",
@@ -2068,6 +2224,7 @@ async function addQuestionsFromText(quizId, text, options) {
 ```
 
 **Success Response** (202 Accepted):
+
 ```json
 {
   "success": true,
@@ -2083,6 +2240,7 @@ async function addQuestionsFromText(quizId, text, options) {
 ```
 
 **Error Responses**:
+
 - `401 Unauthorized` - Not authenticated
 - `403 Forbidden` - Not the quiz owner OR not the file owner
 - `404 Not Found` - Quiz or file not found
@@ -2096,13 +2254,16 @@ async function addQuestionsFromText(quizId, text, options) {
 **Description**: Extract existing questions from image/PDF and add to an existing quiz
 
 **URL Parameters**:
+
 - `id`: Quiz UUID
 
 **Request Body** (multipart/form-data):
+
 - `file`: Image or PDF file (JPG, PNG, PDF; max 10MB)
 - `extract_images`: Whether to extract images (optional, default: true)
 
 **Success Response** (202 Accepted):
+
 ```json
 {
   "success": true,
@@ -2118,25 +2279,30 @@ async function addQuestionsFromText(quizId, text, options) {
 ```
 
 **Error Responses**:
+
 - `401 Unauthorized` - Not authenticated
 - `403 Forbidden` - Not the quiz owner
 - `404 Not Found` - Quiz not found
 - `400 Bad Request` - Invalid file type or file too large
 
 **Frontend Implementation**:
+
 ```javascript
 async function extractQuestionsFromFile(quizId, file, extractImages = true) {
   const formData = new FormData();
-  formData.append('file', file);
-  formData.append('extract_images', extractImages);
+  formData.append("file", file);
+  formData.append("extract_images", extractImages);
 
-  const response = await fetch(`/api/v1/quizzes/${quizId}/extract-questions-from-file`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`
+  const response = await fetch(
+    `/api/v1/quizzes/${quizId}/extract-questions-from-file`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
     },
-    body: formData
-  });
+  );
 
   const data = await response.json();
 
@@ -2155,6 +2321,7 @@ async function extractQuestionsFromFile(quizId, file, extractImages = true) {
 ### Standard Error Response
 
 All errors return this format:
+
 ```json
 {
   "error": {
@@ -2169,21 +2336,21 @@ All errors return this format:
 
 ### Common Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `invalid-credentials` | 401 | Wrong email or password |
-| `email-not-verified` | 401 | Email not verified yet |
-| `account-locked` | 401 | Too many failed login attempts |
-| `account-disabled` | 401 | Account disabled by admin |
-| `invalid-token` | 401 | Invalid or expired JWT token |
-| `access-denied` | 403 | Not authorized for this resource |
-| `admin-access-required` | 403 | Admin role required |
-| `email-already-exists` | 409 | Email already registered |
-| `password-too-weak` | 400 | Password doesn't meet requirements |
-| `quiz-not-published` | 400 | Quiz must be published |
-| `attempt-expired` | 400 | Quiz attempt has expired |
-| `invalid-quiz-id` | 400 | Invalid UUID format |
-| `resource-not-found` | 404 | Resource doesn't exist |
+| Code                    | HTTP Status | Description                        |
+| ----------------------- | ----------- | ---------------------------------- |
+| `invalid-credentials`   | 401         | Wrong email or password            |
+| `email-not-verified`    | 401         | Email not verified yet             |
+| `account-locked`        | 401         | Too many failed login attempts     |
+| `account-disabled`      | 401         | Account disabled by admin          |
+| `invalid-token`         | 401         | Invalid or expired JWT token       |
+| `access-denied`         | 403         | Not authorized for this resource   |
+| `admin-access-required` | 403         | Admin role required                |
+| `email-already-exists`  | 409         | Email already registered           |
+| `password-too-weak`     | 400         | Password doesn't meet requirements |
+| `quiz-not-published`    | 400         | Quiz must be published             |
+| `attempt-expired`       | 400         | Quiz attempt has expired           |
+| `invalid-quiz-id`       | 400         | Invalid UUID format                |
+| `resource-not-found`    | 404         | Resource doesn't exist             |
 
 ### Error Handling Best Practices
 
@@ -2201,12 +2368,12 @@ All errors return this format:
 
 ### Current Limits
 
-| Endpoint Type | Limit |
-|---------------|-------|
-| Authentication (signup, login, forgot-password) | 5 requests/minute |
-| General API | 100 requests/minute |
-| Quiz Creation | No limit currently |
-| File Upload | 10 requests/minute |
+| Endpoint Type                                   | Limit               |
+| ----------------------------------------------- | ------------------- |
+| Authentication (signup, login, forgot-password) | 5 requests/minute   |
+| General API                                     | 100 requests/minute |
+| Quiz Creation                                   | No limit currently  |
+| File Upload                                     | 10 requests/minute  |
 
 ### Rate Limit Headers
 
@@ -2237,6 +2404,7 @@ X-RateLimit-Reset: 1641825600
 **Status**: Not currently supported
 
 **Future**: WebSocket support planned for:
+
 - Real-time quiz sessions (multiplayer)
 - Live leaderboards
 - Instant result updates
