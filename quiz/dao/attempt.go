@@ -514,7 +514,7 @@ func GetAttemptResult(ctx context.Context, attemptID uuid.UUID) (*model.AttemptR
 	answersQry := `SELECT
 		ua.id, ua.attempt_id, ua.question_id, ua.answer_id, ua.answer_text,
 		ua.is_correct, ua.points_earned, ua.answered_at, ua.meta, ua.created_at, ua.updated_at,
-		q.question_text, q.question_type, q.points, q.explanation,
+		q.question_text, q.question_type, q.points, q.meta, q.explanation,
 		sa.answer_text as selected_answer_text,
 		ca.answer_text as correct_answer_text
 		FROM user_answers ua
@@ -538,6 +538,7 @@ func GetAttemptResult(ctx context.Context, attemptID uuid.UUID) (*model.AttemptR
 		var answerTextSQL sql.NullString
 		var isCorrectSQL sql.NullBool
 		var answerMetaJSON []byte
+		var questionMetaJSON []byte
 		var explanationSQL sql.NullString
 		var selectedAnswerTextSQL sql.NullString
 		var correctAnswerTextSQL sql.NullString
@@ -557,6 +558,7 @@ func GetAttemptResult(ctx context.Context, attemptID uuid.UUID) (*model.AttemptR
 			&answer.QuestionText,
 			&answer.QuestionType,
 			&answer.QuestionPoints,
+			&questionMetaJSON,
 			&explanationSQL,
 			&selectedAnswerTextSQL,
 			&correctAnswerTextSQL,
@@ -589,6 +591,9 @@ func GetAttemptResult(ctx context.Context, attemptID uuid.UUID) (*model.AttemptR
 		// Parse meta JSON
 		if len(answerMetaJSON) > 0 {
 			json.Unmarshal(answerMetaJSON, &answer.Meta)
+		}
+		if len(questionMetaJSON) > 0 {
+			json.Unmarshal(questionMetaJSON, &answer.QuestionMeta)
 		}
 
 		answers = append(answers, answer)

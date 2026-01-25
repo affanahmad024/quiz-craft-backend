@@ -61,6 +61,7 @@ type UserAnswerWithDetails struct {
 	QuestionText       string   `json:"question_text"`
 	QuestionType       string   `json:"question_type"`
 	QuestionPoints     int      `json:"question_points"`
+	QuestionMeta       JSONMap  `json:"question_meta,omitempty"`
 	Explanation        *string  `json:"explanation,omitempty"`
 	SelectedAnswerText *string  `json:"selected_answer_text,omitempty"`
 	CorrectAnswerText  *string  `json:"correct_answer_text,omitempty"`

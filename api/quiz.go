@@ -454,6 +454,8 @@ func AddQuestion(c *gin.Context) {
 
 	// Handle multipart/form-data with optional image
 	if strings.Contains(contentType, "multipart/form-data") {
+		var uploadedImageFileID *string
+
 		// Get optional image file
 		imageFile, imageHeader, _ := c.Request.FormFile("image")
 		if imageFile != nil {
@@ -472,7 +474,7 @@ func AddQuestion(c *gin.Context) {
 			}
 
 			imageFileID := fileUpload.ID
-			req.ImageFileID = &imageFileID
+			uploadedImageFileID = &imageFileID
 		}
 
 		// Check if question_data field exists (JSON string containing all question data)
@@ -482,6 +484,10 @@ func AddQuestion(c *gin.Context) {
 				commons.LogW(ctx, "[api.AddQuestion::QuestionDataParseErr [err=%v", err)
 				commons.RespBadReq(c, "invalid question_data JSON")
 				return
+			}
+			// If an image was uploaded via multipart, use that (it takes precedence over any image_file_id in JSON)
+			if uploadedImageFileID != nil {
+				req.ImageFileID = uploadedImageFileID
 			}
 		} else {
 			// Parse individual form fields (backward compatibility)
@@ -522,6 +528,11 @@ func AddQuestion(c *gin.Context) {
 				}
 				req.Meta = meta
 			}
+
+			// Set the uploaded image file ID
+			if uploadedImageFileID != nil {
+				req.ImageFileID = uploadedImageFileID
+			}
 		}
 	} else {
 		// Handle JSON (backward compatibility)
@@ -532,7 +543,8 @@ func AddQuestion(c *gin.Context) {
 		}
 	}
 
-	commons.Log(ctx, "[api.AddQuestion [user_id=%s [quiz_id=%s", userID, quizID)
+	commons.Log(ctx, "[api.AddQuestion [user_id=%s [quiz_id=%s [has_image=%v [image_file_id=%v",
+		userID, quizID, req.ImageFileID != nil, req.ImageFileID)
 
 	question, err := core.AddQuestion(ctx, quizID, userID.String(), req)
 	if err != nil {
@@ -734,10 +746,14 @@ func UpdateQuestion(c *gin.Context) {
 
 	// Handle multipart/form-data with optional image
 	if strings.Contains(contentType, "multipart/form-data") {
+		var uploadedImageFileID *string
+		var removeImage bool
+
 		// Check for image removal flag
 		if c.PostForm("remove_image") == "true" {
 			emptyStr := ""
-			req.ImageFileID = &emptyStr
+			uploadedImageFileID = &emptyStr
+			removeImage = true
 		} else {
 			// Get optional new image file
 			imageFile, imageHeader, _ := c.Request.FormFile("image")
@@ -757,7 +773,7 @@ func UpdateQuestion(c *gin.Context) {
 				}
 
 				imageFileID := fileUpload.ID
-				req.ImageFileID = &imageFileID
+				uploadedImageFileID = &imageFileID
 			}
 		}
 
@@ -768,6 +784,10 @@ func UpdateQuestion(c *gin.Context) {
 				commons.LogW(ctx, "[api.UpdateQuestion::QuestionDataParseErr [err=%v", err)
 				commons.RespBadReq(c, "invalid question_data JSON")
 				return
+			}
+			// If an image was uploaded or removed via multipart, use that (it takes precedence)
+			if uploadedImageFileID != nil || removeImage {
+				req.ImageFileID = uploadedImageFileID
 			}
 		} else {
 			// Parse individual form fields (backward compatibility)
@@ -800,6 +820,11 @@ func UpdateQuestion(c *gin.Context) {
 					return
 				}
 				req.Meta = meta
+			}
+
+			// Set the uploaded or removed image file ID
+			if uploadedImageFileID != nil || removeImage {
+				req.ImageFileID = uploadedImageFileID
 			}
 		}
 	} else {

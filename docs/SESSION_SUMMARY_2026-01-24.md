@@ -350,6 +350,97 @@ curl -X GET http://localhost:8080/api/v1/files/serve/{file-id} \
 
 ---
 
+---
+
+## Issue 7: Manual Question Image Upload Not Working ✅
+
+**Problem**: When manually creating questions with images through the frontend, the image was being uploaded successfully but not appearing in the question's `meta` field.
+
+**User Report**:
+```json
+{
+  "question_text": "adding image",
+  "meta": {
+    "answer_count": 2  // Missing image_url and image_file_id
+  }
+}
+```
+
+**Root Cause**:
+In `backend/api/quiz.go`, both `AddQuestion` and `UpdateQuestion` handlers had a critical bug:
+
+1. Backend uploads the image file and stores the file ID in a variable
+2. Backend parses `question_data` JSON or individual form fields into `req` struct
+3. **BUG**: Backend never assigns the uploaded image file ID to `req.ImageFileID` in BOTH code paths!
+
+The uploaded image ID was only being set when `question_data` JSON was provided, but NOT when individual form fields were used. Even in the JSON path, it was being set BEFORE the JSON unmarshal, which would overwrite it.
+
+**Solution**:
+- ✅ Store uploaded image ID in temporary variable `uploadedImageFileID`
+- ✅ Parse question_data JSON into `req` struct
+- ✅ **After parsing**, assign `req.ImageFileID = uploadedImageFileID` (preserves the uploaded image)
+- ✅ Same fix applied to both code paths: JSON parsing AND individual form fields
+- ✅ Applied fix to both `AddQuestion` and `UpdateQuestion` handlers
+
+**Code Changes**:
+
+```go
+// Store the uploaded file ID in a temporary variable
+var uploadedImageFileID *string
+if imageFile != nil {
+    fileUpload, err := fileUploadService.SaveFile(...)
+    imageFileID := fileUpload.ID
+    uploadedImageFileID = &imageFileID  // Store it!
+}
+
+// Parse question_data JSON
+if questionDataJSON := c.PostForm("question_data"); questionDataJSON != "" {
+    json.Unmarshal([]byte(questionDataJSON), &req)
+    // Restore the uploaded image ID after unmarshaling
+    if uploadedImageFileID != nil {
+        req.ImageFileID = uploadedImageFileID
+    }
+} else {
+    // Parse individual form fields...
+    // ...
+    // Restore the uploaded image ID
+    if uploadedImageFileID != nil {
+        req.ImageFileID = uploadedImageFileID
+    }
+}
+```
+
+**Files Modified**:
+- `backend/api/quiz.go` (AddQuestion handler, lines 455-535)
+- `backend/api/quiz.go` (UpdateQuestion handler, lines 746-824)
+- `backend/quiz/core/quiz.go` (added debug logging, line 455)
+- `backend/CHANGELOG.md` (added v1.3.2)
+- `backend/docs/IMAGE_UPLOAD_FIX.md` (new documentation)
+- `backend/docs/RESTART_BACKEND.md` (new restart guide)
+
+**Testing**:
+```bash
+curl -X POST "http://localhost:8080/api/v1/quizzes/{quiz-id}/questions" \
+  -H "Authorization: Bearer TOKEN" \
+  -F "image=@test.png" \
+  -F 'question_data={"question_text":"Test","question_type":"multiple_choice","points":1,"answers":[...]}'
+```
+
+**Expected Response**:
+```json
+{
+  "data": {
+    "meta": {
+      "image_url": "/api/v1/files/serve/abc-123",
+      "image_file_id": "abc-123",
+      "answer_count": 2
+    }
+  }
+}
+```
+
+---
+
 ## Conclusion
 
 All critical issues have been resolved:
@@ -359,5 +450,6 @@ All critical issues have been resolved:
 ✅ Images can be viewed via serve endpoint
 ✅ All job types properly handled by worker
 ✅ Database schema complete and indexed
+✅ **Manual question image upload now works in single step**
 
-The system is production-ready for the "Add to Existing Quiz" feature.
+The system is production-ready for both AI-generated and manual question creation with full image support.

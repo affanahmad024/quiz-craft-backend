@@ -2,6 +2,24 @@
 
 All notable changes to the QuizCraft Backend will be documented in this file.
 
+## [1.3.2] - 2026-01-24
+
+### Fixed
+- **Manual Question Image Upload**: Fixed critical bug where images uploaded with manually created questions were not being saved to question metadata
+  - Root cause: When processing multipart/form-data requests, the backend would save the uploaded image file and set the `ImageFileID`, but then parse the `question_data` JSON which would overwrite the entire request struct, losing the `ImageFileID`
+  - Fixed `AddQuestion` endpoint: Now preserves the uploaded image file ID after parsing question_data JSON
+  - Fixed `UpdateQuestion` endpoint: Same fix applied to prevent loss of uploaded image data
+  - Frontend already sends images in single-step multipart requests, now backend properly handles them
+  - Questions created with images now correctly show `image_url` and `image_file_id` in their `meta` field
+  - This was the final piece to complete single-step image upload for manual question creation
+
+- **GetQuizWithQuestions Meta Field Preservation**: Fixed bug where `/full` endpoint was destroying image metadata
+  - Root cause: The `GetQuizWithQuestions` function was replacing the entire `meta` object with `{"answer_count": N}`, removing `image_url` and `image_file_id`
+  - Fixed to preserve existing meta fields and only add/update the `answer_count` field
+  - Now `GET /api/v1/quizzes/:id/full` correctly returns image metadata for questions with images
+  - Applied fix to both `hideCorrectAnswers` code paths (quiz attempts and quiz editing)
+  - Questions with images now properly display in the frontend when fetching full quiz data
+
 ## [1.3.1] - 2026-01-24
 
 ### Fixed

@@ -114,7 +114,11 @@ func GetQuizWithQuestions(ctx context.Context, quizID string, userID string, hid
 			}
 			// Attach answers without is_correct field
 			question.Answers = answerItems
-			question.Meta = model.JSONMap{"answer_count": len(answerItems)}
+			// Preserve existing meta fields (like image_url, image_file_id) and add answer_count
+			if question.Meta == nil {
+				question.Meta = model.JSONMap{}
+			}
+			question.Meta["answer_count"] = len(answerItems)
 		} else {
 			// For quiz creators/editors - show correct answers
 			answers, err := quizdao.ListByQuestionID(ctx, questionUUID)
@@ -128,7 +132,11 @@ func GetQuizWithQuestions(ctx context.Context, quizID string, userID string, hid
 				answerList = append(answerList, *ans)
 			}
 			question.Answers = answerList
-			question.Meta = model.JSONMap{"answer_count": len(answers)}
+			// Preserve existing meta fields (like image_url, image_file_id) and add answer_count
+			if question.Meta == nil {
+				question.Meta = model.JSONMap{}
+			}
+			question.Meta["answer_count"] = len(answers)
 		}
 
 		questionsWithAnswers = append(questionsWithAnswers, *question)
@@ -452,6 +460,7 @@ func AddQuestion(ctx context.Context, quizID string, userID string, input model.
 
 	// Process image file if provided
 	if input.ImageFileID != nil && *input.ImageFileID != "" {
+		commons.Log(ctx, "[core.AddQuestion::ProcessingImage [image_file_id=%s", *input.ImageFileID)
 		fileUUID, err := uuid.Parse(*input.ImageFileID)
 		if err != nil {
 			commons.LogW(ctx, "[core.AddQuestion::InvalidImageFileID [err=%v", err)
