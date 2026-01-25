@@ -47,13 +47,11 @@ type JWTConfig struct {
 }
 
 type EmailConfig struct {
-	SMTPHost     string `mapstructure:"smtp_host"`
-	SMTPPort     int    `mapstructure:"smtp_port"`
-	SMTPUsername string `mapstructure:"smtp_username"`
-	SMTPPassword string `mapstructure:"smtp_password"`
-	FromEmail    string `mapstructure:"from_email"`
-	FromName     string `mapstructure:"from_name"`
-	FrontendURL  string `mapstructure:"frontend_url"`
+	MailjetAPIKey    string `mapstructure:"mailjet_api_key"`
+	MailjetSecretKey string `mapstructure:"mailjet_secret_key"`
+	FromEmail        string `mapstructure:"from_email"`
+	FromName         string `mapstructure:"from_name"`
+	FrontendURL      string `mapstructure:"frontend_url"`
 }
 
 type AppConfig struct {
@@ -126,10 +124,8 @@ func Load() (*Config, error) {
 	viper.BindEnv("jwt.access_token_expire", "JWT_ACCESS_TOKEN_EXPIRE")
 	viper.BindEnv("jwt.refresh_token_expire", "JWT_REFRESH_TOKEN_EXPIRE")
 
-	viper.BindEnv("email.smtp_host", "SMTP_HOST")
-	viper.BindEnv("email.smtp_port", "SMTP_PORT")
-	viper.BindEnv("email.smtp_username", "SMTP_USERNAME")
-	viper.BindEnv("email.smtp_password", "SMTP_PASSWORD")
+	viper.BindEnv("email.mailjet_api_key", "MAILJET_API_KEY")
+	viper.BindEnv("email.mailjet_secret_key", "MAILJET_SECRET_KEY")
 	viper.BindEnv("email.from_email", "SMTP_FROM_EMAIL")
 	viper.BindEnv("email.from_name", "SMTP_FROM_NAME")
 	viper.BindEnv("email.frontend_url", "FRONTEND_URL")
@@ -225,8 +221,6 @@ func setDefaults() {
 	viper.SetDefault("jwt.refresh_token_expire", "168h")
 
 	// Email defaults
-	viper.SetDefault("email.smtp_host", "smtp.sendgrid.net")
-	viper.SetDefault("email.smtp_port", 587)
 	viper.SetDefault("email.from_name", "QuizCraft")
 	viper.SetDefault("email.frontend_url", "http://localhost:3000")
 

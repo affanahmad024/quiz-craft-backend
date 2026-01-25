@@ -3,7 +3,6 @@ package services
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -11,40 +10,25 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/internal/config"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
 	"github.com/google/uuid"
-	"gopkg.in/gomail.v2"
+	mailjet "github.com/mailjet/mailjet-apiv3-go/v4"
 )
 
 // EmailService handles email operations
 type EmailService struct {
-	config *config.EmailConfig
-	dialer *gomail.Dialer
+	config    *config.EmailConfig
+	mjClient  *mailjet.Client
 }
 
-// NewEmailService creates a new email service
+// NewEmailService creates a new email service using Mailjet API
 func NewEmailService(cfg *config.EmailConfig) *EmailService {
-	dialer := gomail.NewDialer(
-		cfg.SMTPHost,
-		cfg.SMTPPort,
-		cfg.SMTPUsername,
-		cfg.SMTPPassword,
-	)
+	// Initialize Mailjet client with API credentials
+	mjClient := mailjet.NewMailjetClient(cfg.MailjetAPIKey, cfg.MailjetSecretKey)
 
-	// Configure TLS settings
-	dialer.TLSConfig = &tls.Config{
-		ServerName:         cfg.SMTPHost,
-		InsecureSkipVerify: false,
-	}
-
-	// Port 465 uses implicit SSL, port 587 uses StartTLS (handled automatically by gomail)
-	if cfg.SMTPPort == 465 {
-		dialer.SSL = true
-	}
-
-	logger.GetLogger().Infof("Email service initialized with SMTP host: %s, port: %d", cfg.SMTPHost, cfg.SMTPPort)
+	logger.GetLogger().Infof("Email service initialized with Mailjet API")
 
 	return &EmailService{
-		config: cfg,
-		dialer: dialer,
+		config:    cfg,
+		mjClient:  mjClient,
 	}
 }
 
@@ -98,31 +82,50 @@ func (s *EmailService) SendPasswordChangedEmail(ctx context.Context, toEmail, to
 	return s.sendEmail(toEmail, toName, subject, body)
 }
 
-// sendEmail sends an email
+// sendEmail sends an email using Mailjet API (HTTPS - not blocked by cloud providers)
 func (s *EmailService) sendEmail(toEmail, toName, subject, body string) error {
-	logger.GetLogger().Infof("Attempting to send email: from=%s to=%s subject=%s", s.config.FromEmail, toEmail, subject)
+	logger.GetLogger().Infof("Attempting to send email via Mailjet API: from=%s to=%s subject=%s", s.config.FromEmail, toEmail, subject)
 
-	m := gomail.NewMessage()
+	// Build Mailjet message
+	messagesInfo := []mailjet.InfoMessagesV31{
+		{
+			From: &mailjet.RecipientV31{
+				Email: s.config.FromEmail,
+				Name:  s.config.FromName,
+			},
+			To: &mailjet.RecipientsV31{
+				mailjet.RecipientV31{
+					Email: toEmail,
+					Name:  toName,
+				},
+			},
+			Subject:  subject,
+			HTMLPart: body,
+		},
+	}
 
-	// Set sender
-	m.SetHeader("From", m.FormatAddress(s.config.FromEmail, s.config.FromName))
+	messages := mailjet.MessagesV31{Info: messagesInfo}
 
-	// Set recipient
-	m.SetHeader("To", m.FormatAddress(toEmail, toName))
-
-	// Set subject
-	m.SetHeader("Subject", subject)
-
-	// Set body
-	m.SetBody("text/html", body)
-
-	// Send email
-	if err := s.dialer.DialAndSend(m); err != nil {
-		logger.GetLogger().Errorf("Failed to send email to %s: %v", toEmail, err)
+	// Send the email
+	res, err := s.mjClient.SendMailV31(&messages)
+	if err != nil {
+		logger.GetLogger().Errorf("Failed to send email via Mailjet API to %s: %v", toEmail, err)
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 
-	logger.GetLogger().Infof("✅ Email ACCEPTED by SMTP server (from=%s to=%s) - Check Mailjet dashboard for delivery status", s.config.FromEmail, toEmail)
+	// Check response status
+	if res.ResultsV31 != nil && len(res.ResultsV31) > 0 {
+		result := res.ResultsV31[0]
+		if result.Status == "success" {
+			logger.GetLogger().Infof("✅ Email sent successfully via Mailjet API (from=%s to=%s, MessageID=%d)", s.config.FromEmail, toEmail, result.To[0].MessageID)
+			return nil
+		} else {
+			logger.GetLogger().Errorf("Mailjet API returned non-success status: %s", result.Status)
+			return fmt.Errorf("mailjet returned status: %s", result.Status)
+		}
+	}
+
+	logger.GetLogger().Warnf("⚠️  Email sent but no result data returned from Mailjet")
 	return nil
 }
 
