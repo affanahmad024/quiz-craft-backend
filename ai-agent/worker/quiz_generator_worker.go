@@ -34,7 +34,7 @@ type QuizGeneratorWorker struct {
 func NewQuizGeneratorWorker(db *sql.DB) *QuizGeneratorWorker {
 	apiKey := os.Getenv("GOOGLE_AI_API_KEY")
 	if apiKey == "" {
-		apiKey = "AIzaSyDkTtFFjLXOkrlW6JRfgxXu3kuXMsIjptc"
+		panic("GOOGLE_AI_API_KEY environment variable is required")
 	}
 
 	model := os.Getenv("GOOGLE_AI_MODEL")
