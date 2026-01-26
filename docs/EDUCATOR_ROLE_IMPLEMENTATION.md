@@ -1,8 +1,21 @@
-# Educator Role Implementation - Architecture & Approach
+# Educator Role & Live Quiz Sessions - Architecture & Approach
 
 ## Executive Summary
 
-This document outlines the phased implementation plan for adding an **Educator Role** to the QuizCraft platform. Users can self-promote to educators (with basic verification checks), create content, gain followers through a subscription system, and receive detailed analytics about learner performance. The system also includes live quiz sessions for real-time competitive learning experiences.
+This document outlines the phased implementation plan for adding an **Educator Role** and **Unified Live Quiz Sessions** to the QuizCraft platform.
+
+**Educator Features:**
+- Users can self-promote to educators (with basic verification checks)
+- Gain followers through a subscription system with in-app notifications
+- Receive detailed analytics about learner performance
+- Create public live quiz sessions with full host control
+
+**Live Quiz Sessions (Unified Architecture):**
+- **Educator Public Sessions**: Scheduled, discoverable events with host control
+- **User Private Sessions**: Code-based group quizzes with automatic progression
+- Same technical infrastructure supports both use cases
+- Real-time competitive gameplay with live leaderboards
+- Post-session detailed analysis for all participants
 
 ---
 
@@ -10,14 +23,16 @@ This document outlines the phased implementation plan for adding an **Educator R
 
 1. [Current Architecture Analysis](#current-architecture-analysis)
 2. [Feature Requirements](#feature-requirements)
-3. [Architecture Design](#architecture-design)
-4. [Phased Implementation Plan](#phased-implementation-plan)
-5. [Database Schema Changes](#database-schema-changes)
-6. [API Endpoints](#api-endpoints)
-7. [Security & Access Control](#security--access-control)
-8. [Analytics & Reporting](#analytics--reporting)
-9. [Enhanced Features & Ideas](#enhanced-features--ideas)
-10. [Testing Strategy](#testing-strategy)
+3. [Unified Live Session Architecture](#unified-live-session-architecture)
+4. [In-App Notification System](#in-app-notification-system)
+5. [Architecture Design](#architecture-design)
+6. [Phased Implementation Plan](#phased-implementation-plan)
+7. [Database Schema Changes](#database-schema-changes)
+8. [API Endpoints](#api-endpoints)
+9. [Security & Access Control](#security--access-control)
+10. [Analytics & Reporting](#analytics--reporting)
+11. [Enhanced Features & Ideas](#enhanced-features--ideas)
+12. [Testing Strategy](#testing-strategy)
 
 ---
 
@@ -58,11 +73,23 @@ This document outlines the phased implementation plan for adding an **Educator R
 - Educators can see their follower count and list
 - All educator quizzes are public (no premium/subscriber-only access)
 
-#### 3. Live Quiz Sessions
-- Educators can schedule and host live quiz sessions
+#### 3. Live Quiz Sessions (Unified System)
+
+**A. Educator Public Sessions:**
+- Educators can schedule and host public live quiz sessions
+- Manual question progression (host controls when to advance)
+- Discoverable in public session listings
+- Notification to all followers when session is scheduled
 - Real-time competitive gameplay with live leaderboards
-- Time-bound challenges with synchronized start times
-- Post-session analytics and replay functionality
+- Post-session analytics for educator
+
+**B. User Private Sessions:**
+- ANY user can create instant or scheduled private live quiz
+- Automatic timer-based question progression
+- Access via shareable code
+- Direct user invitations with in-app notifications
+- Same real-time features (WebSocket sync, leaderboards)
+- Post-session detailed analysis visible to all participants
 
 #### 4. Detailed Analytics for Educators
 Educators can see for each quiz:
@@ -77,6 +104,883 @@ Educators can see for each quiz:
   - Time distribution per question
   - Most commonly missed questions
 - **Cohort Analysis**: Compare performance across different time periods or subscriber groups
+
+---
+
+## Unified Live Session Architecture
+
+### Design Philosophy
+
+Instead of building two separate systems (educator sessions vs user group sessions), we build **ONE unified system** that supports both use cases through configuration flags and smart access control.
+
+### Key Differentiators
+
+| Feature | Educator Public Sessions | User Private Sessions |
+|---------|-------------------------|----------------------|
+| **Creator** | Educators only | ANY user |
+| **Discovery** | Public, discoverable | Private, code-based |
+| **Access** | Open to all users | Requires access code |
+| **Progression** | Manual (host control) | Automatic (timer-based) |
+| **Scheduling** | Always scheduled | Instant OR scheduled |
+| **Notifications** | Sent to all followers | Sent to invited users only |
+| **Post-Session Analytics** | Visible to host (educator) | Visible to ALL participants |
+
+### Unified Database Schema
+
+```sql
+CREATE TABLE live_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    quiz_id UUID NOT NULL REFERENCES quizzes(id),
+    creator_id UUID NOT NULL REFERENCES users(id),  -- ANY user, not just educators
+
+    -- Session type determines behavior
+    session_type VARCHAR(20) NOT NULL,  -- 'public' or 'private'
+
+    -- Basic info
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+
+    -- Timing (flexible)
+    scheduled_at TIMESTAMP,  -- NULL = instant, NOT NULL = scheduled
+    started_at TIMESTAMP,
+    ended_at TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'waiting',  -- waiting, live, completed, cancelled
+
+    -- Access control
+    access_code VARCHAR(10),  -- Generated for private sessions
+    is_discoverable BOOLEAN DEFAULT false,  -- Public listing?
+    max_participants INT,
+
+    -- Progression mode
+    progression_mode VARCHAR(20) NOT NULL,  -- 'manual' or 'automatic'
+    question_timer_seconds INT,  -- For automatic mode
+    current_question_index INT DEFAULT 0,
+
+    -- Config (flexible for future features)
+    config JSONB DEFAULT '{}'::jsonb,
+
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    CHECK (session_type IN ('public', 'private')),
+    CHECK (progression_mode IN ('manual', 'automatic')),
+    CHECK (status IN ('waiting', 'live', 'completed', 'cancelled')),
+
+    -- Business rules
+    CONSTRAINT valid_public_session CHECK (
+        session_type = 'private' OR
+        (session_type = 'public' AND scheduled_at IS NOT NULL)
+    ),
+    CONSTRAINT valid_private_session CHECK (
+        session_type = 'public' OR
+        (session_type = 'private' AND access_code IS NOT NULL)
+    )
+);
+
+-- Session invitations (for private sessions)
+CREATE TABLE live_session_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
+    inviter_id UUID NOT NULL REFERENCES users(id),
+    invitee_id UUID NOT NULL REFERENCES users(id),
+    status VARCHAR(20) DEFAULT 'pending',  -- pending, accepted, declined
+    invited_at TIMESTAMP DEFAULT NOW(),
+    responded_at TIMESTAMP,
+
+    UNIQUE (session_id, invitee_id),
+    CHECK (status IN ('pending', 'accepted', 'declined'))
+);
+```
+
+### Access Control Logic
+
+```go
+// File: backend/internal/services/live_session_service.go
+
+func (s *LiveSessionService) CanCreateSession(userID uuid.UUID, sessionType string) error {
+    if sessionType == "public" {
+        // Only educators can create public sessions
+        if !s.IsEducator(userID) {
+            return errors.New("only educators can create public sessions")
+        }
+    }
+    // Anyone can create private sessions
+    return nil
+}
+
+func (s *LiveSessionService) CanJoinSession(userID uuid.UUID, session *LiveSession) error {
+    if session.SessionType == "public" {
+        // Public sessions are open to all
+        return nil
+    }
+
+    // Private sessions require access code OR invitation
+    // This check happens at the API layer when user provides code
+    return nil
+}
+
+func (s *LiveSessionService) CanControlSession(userID uuid.UUID, session *LiveSession) error {
+    // Only the creator can control the session
+    if session.CreatorID != userID {
+        return errors.New("only session creator can control the session")
+    }
+
+    // Manual control only available for manual progression mode
+    if session.ProgressionMode != "manual" {
+        return errors.New("this session uses automatic progression")
+    }
+
+    return nil
+}
+```
+
+### Unified API Endpoints
+
+```
+# ========================================
+# LIVE SESSION CREATION (UNIFIED)
+# ========================================
+
+POST   /api/v1/live-sessions
+Body: {
+  "quiz_id": "...",
+  "title": "...",
+  "description": "...",
+  "session_type": "public" | "private",
+  "scheduled_at": "2024-02-01T19:00:00Z" | null,  // null = instant
+  "progression_mode": "manual" | "automatic",
+  "question_timer_seconds": 30,  // For automatic mode
+  "max_participants": 50,
+  "is_discoverable": true | false
+}
+Response: {
+  "session": {...},
+  "access_code": "XYZ123"  // Only for private sessions
+}
+
+# Validation:
+# - If session_type='public', require creator to be educator
+# - If session_type='public', require scheduled_at
+# - If session_type='private', generate access_code
+# - If progression_mode='automatic', require question_timer_seconds
+
+# ========================================
+# SESSION INVITATION (PRIVATE SESSIONS)
+# ========================================
+
+POST   /api/v1/live-sessions/:id/invite
+Body: {
+  "user_ids": ["uuid1", "uuid2", ...]
+}
+Response: {
+  "message": "Invitations sent",
+  "invited_count": 5
+}
+# Creates in-app notifications for invited users
+# Only private session creators can invite
+
+GET    /api/v1/live-sessions/:id/invitations
+Response: {
+  "invitations": [
+    {
+      "user": {...},
+      "status": "pending",
+      "invited_at": "..."
+    }
+  ]
+}
+
+# ========================================
+# SESSION DISCOVERY (PUBLIC vs PRIVATE)
+# ========================================
+
+# Public sessions (discoverable)
+GET    /api/v1/live-sessions/public
+Query: ?status=upcoming,live&page=1
+Response: {
+  "sessions": [...]  // Only public, discoverable sessions
+}
+
+# My sessions (creator view)
+GET    /api/v1/live-sessions/mine
+Response: {
+  "sessions": [...]  // All my created sessions (public + private)
+}
+
+# Sessions I'm invited to
+GET    /api/v1/live-sessions/invitations
+Response: {
+  "sessions": [...]  // Private sessions I'm invited to
+}
+
+# ========================================
+# SESSION JOIN (ACCESS CONTROL)
+# ========================================
+
+POST   /api/v1/live-sessions/:id/join
+Body: {
+  "access_code": "XYZ123"  // Required for private, ignored for public
+}
+Response: {
+  "message": "Joined session",
+  "participant": {...}
+}
+
+# Validation:
+# - Public session: anyone can join
+# - Private session: must provide correct access_code OR have invitation
+
+# ========================================
+# SESSION CONTROL (HOST ONLY)
+# ========================================
+
+# Manual progression (educators with public sessions)
+POST   /api/v1/live-sessions/:id/start
+POST   /api/v1/live-sessions/:id/next-question
+POST   /api/v1/live-sessions/:id/end
+
+# Validation:
+# - Only session creator can call these
+# - Only works if progression_mode='manual'
+# - Automatic sessions start/progress/end automatically
+
+# ========================================
+# POST-SESSION ANALYTICS
+# ========================================
+
+GET    /api/v1/live-sessions/:id/results
+Response: {
+  "session": {...},
+  "final_leaderboard": [...],
+  "my_performance": {...},
+
+  // For public sessions (educator view)
+  "detailed_analytics": {
+    "question_stats": [...],
+    "participant_performance": [...]
+  },
+
+  // For private sessions (all participants can see)
+  "participant_details": [
+    {
+      "user": {...},
+      "score": 850,
+      "rank": 3,
+      "answers": [
+        {
+          "question": {...},
+          "answer": {...},
+          "is_correct": true,
+          "time_taken_ms": 4500
+        }
+      ]
+    }
+  ]
+}
+
+# Access control:
+# - Public sessions: Only creator sees detailed_analytics
+# - Private sessions: ALL participants see participant_details
+```
+
+### Progression Modes
+
+#### Manual Progression (Educator Public Sessions)
+
+```go
+// Educator controls when to show each question
+// Flow:
+1. Educator calls POST /live-sessions/:id/start
+2. Question 1 revealed to all participants
+3. Participants submit answers
+4. Educator calls POST /live-sessions/:id/next-question
+5. Question 2 revealed, and so on...
+6. Educator calls POST /live-sessions/:id/end when done
+
+// Benefits:
+// - Educator can discuss answers between questions
+// - Can adjust pacing based on participant engagement
+// - Can skip/repeat questions
+```
+
+#### Automatic Progression (User Private Sessions)
+
+```go
+// Timer automatically advances questions
+// Flow:
+1. Creator calls POST /live-sessions/:id/start (or auto-starts at scheduled_at)
+2. Question 1 revealed with timer (e.g., 30 seconds)
+3. Timer counts down via WebSocket
+4. When timer reaches 0, automatically advance to Question 2
+5. Repeat until all questions completed
+6. Session automatically ends after last question
+
+// Implementation:
+// - Background worker monitors 'live' sessions with progression_mode='automatic'
+// - Uses question_timer_seconds from config
+// - Sends WebSocket events: timer_update, question_auto_advance
+```
+
+### WebSocket Events (Unified)
+
+```json
+// Common events for both session types
+
+// Session lifecycle
+{"type": "session_started", "session_id": "...", "total_questions": 20}
+{"type": "question_revealed", "question": {...}, "index": 1, "timer_seconds": 30}
+{"type": "participant_joined", "participant": {...}, "total_participants": 45}
+{"type": "participant_left", "participant": {...}}
+
+// Real-time scoring
+{"type": "answer_submitted", "participant_id": "...", "score": 100}
+{"type": "leaderboard_update", "leaderboard": [{...}]}
+
+// Question completion
+{"type": "question_ended", "correct_answer": {...}, "stats": {...}}
+
+// Automatic progression specific
+{"type": "timer_update", "seconds_remaining": 15}
+{"type": "question_auto_advance", "next_question_index": 2}
+
+// Session end
+{"type": "session_ended", "final_leaderboard": [...], "session_id": "..."}
+```
+
+### Implementation Benefits
+
+✅ **No Code Duplication**: Single codebase handles both use cases
+✅ **Flexible Access Control**: Simple checks based on session_type
+✅ **Unified WebSocket Infrastructure**: Same real-time system for both
+✅ **Easy Testing**: Test once, works for both scenarios
+✅ **Future-Proof**: Easy to add new session types (e.g., "semi-private")
+
+---
+
+## In-App Notification System
+
+### Overview
+
+The in-app notification system delivers real-time notifications to users without relying on email. Notifications are stored in the database and delivered via REST API + optional WebSocket for real-time delivery.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Trigger Events                      │
+│  - Educator publishes quiz                           │
+│  - Educator schedules live session                   │
+│  - User invited to private session                   │
+│  - Live session starting (10 min reminder)           │
+│  - New follower                                      │
+└────────────────┬────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────┐
+│          Notification Service                        │
+│  - CreateNotification(userID, type, data)            │
+│  - CreateBulkNotifications(userIDs[], type, data)    │
+│  - MarkAsRead(notificationID)                        │
+└────────────────┬────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────┐
+│           PostgreSQL (notifications table)           │
+│  - Persistent storage                                │
+│  - Indexed by user_id, is_read, created_at          │
+└────────────────┬────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────┐
+│         Delivery Channels                            │
+│  1. REST API: GET /api/v1/notifications              │
+│  2. WebSocket (optional): Real-time push             │
+└─────────────────────────────────────────────────────┘
+```
+
+### Database Schema
+
+```sql
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    -- Notification type and content
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+
+    -- Context data (JSONB for flexibility)
+    data JSONB DEFAULT '{}'::jsonb,
+
+    -- Read status
+    is_read BOOLEAN DEFAULT false,
+    read_at TIMESTAMP,
+
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    CHECK (type IN (
+        'new_quiz',
+        'live_session_scheduled',
+        'live_session_starting',  -- 10 min reminder
+        'live_session_invitation',
+        'new_follower',
+        'system'
+    ))
+);
+
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = false;
+CREATE INDEX idx_notifications_created_at ON notifications(user_id, created_at DESC);
+CREATE INDEX idx_notifications_type ON notifications(type);
+```
+
+### Notification Service Implementation
+
+```go
+// File: backend/internal/services/notification_service.go
+
+package services
+
+import (
+    "context"
+    "database/sql"
+    "encoding/json"
+    "time"
+
+    "github.com/google/uuid"
+)
+
+type NotificationService struct {
+    db *sql.DB
+}
+
+type NotificationData map[string]interface{}
+
+// CreateNotification creates a single notification
+func (s *NotificationService) CreateNotification(
+    ctx context.Context,
+    userID uuid.UUID,
+    notifType string,
+    title string,
+    message string,
+    data NotificationData,
+) error {
+    dataJSON, _ := json.Marshal(data)
+
+    query := `
+        INSERT INTO notifications (user_id, type, title, message, data)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+    `
+
+    var notifID uuid.UUID
+    err := s.db.QueryRowContext(ctx, query, userID, notifType, title, message, dataJSON).Scan(&notifID)
+    if err != nil {
+        return err
+    }
+
+    // Optional: Trigger real-time WebSocket delivery
+    s.sendWebSocketNotification(userID, notifID)
+
+    return nil
+}
+
+// CreateBulkNotifications creates notifications for multiple users (e.g., all followers)
+func (s *NotificationService) CreateBulkNotifications(
+    ctx context.Context,
+    userIDs []uuid.UUID,
+    notifType string,
+    title string,
+    message string,
+    data NotificationData,
+) error {
+    dataJSON, _ := json.Marshal(data)
+
+    query := `
+        INSERT INTO notifications (user_id, type, title, message, data)
+        SELECT unnest($1::uuid[]), $2, $3, $4, $5
+    `
+
+    _, err := s.db.ExecContext(ctx, query, pq.Array(userIDs), notifType, title, message, dataJSON)
+    return err
+}
+
+// GetUserNotifications retrieves notifications for a user
+func (s *NotificationService) GetUserNotifications(
+    ctx context.Context,
+    userID uuid.UUID,
+    unreadOnly bool,
+    limit int,
+    offset int,
+) ([]Notification, error) {
+    query := `
+        SELECT id, type, title, message, data, is_read, read_at, created_at
+        FROM notifications
+        WHERE user_id = $1
+    `
+
+    if unreadOnly {
+        query += " AND is_read = false"
+    }
+
+    query += " ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+
+    rows, err := s.db.QueryContext(ctx, query, userID, limit, offset)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var notifications []Notification
+    for rows.Next() {
+        var n Notification
+        var dataJSON []byte
+
+        err := rows.Scan(&n.ID, &n.Type, &n.Title, &n.Message, &dataJSON, &n.IsRead, &n.ReadAt, &n.CreatedAt)
+        if err != nil {
+            return nil, err
+        }
+
+        json.Unmarshal(dataJSON, &n.Data)
+        notifications = append(notifications, n)
+    }
+
+    return notifications, nil
+}
+
+// MarkAsRead marks a notification as read
+func (s *NotificationService) MarkAsRead(ctx context.Context, notificationID uuid.UUID, userID uuid.UUID) error {
+    query := `
+        UPDATE notifications
+        SET is_read = true, read_at = NOW()
+        WHERE id = $1 AND user_id = $2
+    `
+
+    _, err := s.db.ExecContext(ctx, query, notificationID, userID)
+    return err
+}
+
+// MarkAllAsRead marks all notifications as read for a user
+func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID uuid.UUID) error {
+    query := `
+        UPDATE notifications
+        SET is_read = true, read_at = NOW()
+        WHERE user_id = $1 AND is_read = false
+    `
+
+    _, err := s.db.ExecContext(ctx, query, userID)
+    return err
+}
+
+// GetUnreadCount gets the count of unread notifications
+func (s *NotificationService) GetUnreadCount(ctx context.Context, userID uuid.UUID) (int, error) {
+    var count int
+    query := `SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_read = false`
+    err := s.db.QueryRowContext(ctx, query, userID).Scan(&count)
+    return count, err
+}
+```
+
+### Notification Triggers
+
+#### 1. New Quiz Published (Educator → Followers)
+
+```go
+// File: backend/api/quiz.go
+
+func PublishQuiz(c *gin.Context) {
+    // ... existing publish logic ...
+
+    // If user is educator, notify all followers
+    if isEducator(userID) {
+        go func() {
+            followerIDs := subscriptionService.GetFollowerIDs(educatorID)
+
+            notificationService.CreateBulkNotifications(
+                context.Background(),
+                followerIDs,
+                "new_quiz",
+                fmt.Sprintf("New Quiz from %s", educatorName),
+                fmt.Sprintf("%s just published '%s'", educatorName, quizTitle),
+                NotificationData{
+                    "quiz_id": quizID,
+                    "educator_id": educatorID,
+                    "educator_name": educatorName,
+                    "quiz_title": quizTitle,
+                },
+            )
+        }()
+    }
+
+    // ... return response ...
+}
+```
+
+#### 2. Live Session Scheduled (Educator → Followers)
+
+```go
+// When educator creates a public live session
+func CreateLiveSession(c *gin.Context) {
+    // ... create session logic ...
+
+    if session.SessionType == "public" {
+        go func() {
+            followerIDs := subscriptionService.GetFollowerIDs(session.CreatorID)
+
+            notificationService.CreateBulkNotifications(
+                context.Background(),
+                followerIDs,
+                "live_session_scheduled",
+                fmt.Sprintf("Live Session from %s", educatorName),
+                fmt.Sprintf("Join '%s' on %s", session.Title, session.ScheduledAt.Format("Jan 2, 3:04 PM")),
+                NotificationData{
+                    "session_id": session.ID,
+                    "educator_id": session.CreatorID,
+                    "scheduled_at": session.ScheduledAt,
+                    "title": session.Title,
+                },
+            )
+        }()
+    }
+}
+```
+
+#### 3. Private Session Invitation
+
+```go
+// When user invites others to private session
+func InviteToSession(c *gin.Context) {
+    // ... validation logic ...
+
+    for _, inviteeID := range req.UserIDs {
+        // Create invitation record
+        invitation := createInvitation(sessionID, userID, inviteeID)
+
+        // Send notification
+        notificationService.CreateNotification(
+            context.Background(),
+            inviteeID,
+            "live_session_invitation",
+            fmt.Sprintf("%s invited you to a live quiz", inviterName),
+            fmt.Sprintf("Join '%s' and compete with your friends!", session.Title),
+            NotificationData{
+                "session_id": session.ID,
+                "inviter_id": userID,
+                "inviter_name": inviterName,
+                "access_code": session.AccessCode,
+                "scheduled_at": session.ScheduledAt,  // May be null for instant
+            },
+        )
+    }
+}
+```
+
+#### 4. Live Session Starting (Reminder)
+
+```go
+// Background worker that runs every minute
+func SessionReminderWorker() {
+    for {
+        time.Sleep(1 * time.Minute)
+
+        // Find sessions starting in 10 minutes
+        sessions := getSessionsStartingIn(10 * time.Minute)
+
+        for _, session := range sessions {
+            if session.SessionType == "public" {
+                // Notify all followers
+                followerIDs := subscriptionService.GetFollowerIDs(session.CreatorID)
+                notificationService.CreateBulkNotifications(
+                    context.Background(),
+                    followerIDs,
+                    "live_session_starting",
+                    "Live Session Starting Soon!",
+                    fmt.Sprintf("'%s' starts in 10 minutes", session.Title),
+                    NotificationData{
+                        "session_id": session.ID,
+                        "starts_at": session.ScheduledAt,
+                    },
+                )
+            } else {
+                // Private session: notify invited participants
+                invitedUserIDs := getInvitedUserIDs(session.ID)
+                notificationService.CreateBulkNotifications(
+                    context.Background(),
+                    invitedUserIDs,
+                    "live_session_starting",
+                    "Live Quiz Starting Soon!",
+                    fmt.Sprintf("'%s' starts in 10 minutes", session.Title),
+                    NotificationData{
+                        "session_id": session.ID,
+                        "starts_at": session.ScheduledAt,
+                    },
+                )
+            }
+
+            // Mark session as "reminder_sent" to avoid duplicate notifications
+            markReminderSent(session.ID)
+        }
+    }
+}
+```
+
+### API Endpoints
+
+```
+# ========================================
+# NOTIFICATION ENDPOINTS
+# ========================================
+
+GET    /api/v1/notifications
+Query: ?unread_only=true&page=1&limit=20
+Response: {
+  "notifications": [
+    {
+      "id": "...",
+      "type": "new_quiz",
+      "title": "New Quiz from John Doe",
+      "message": "John Doe just published 'Python Basics'",
+      "data": {
+        "quiz_id": "...",
+        "educator_id": "...",
+        "educator_name": "John Doe",
+        "quiz_title": "Python Basics"
+      },
+      "is_read": false,
+      "created_at": "2024-01-27T10:30:00Z"
+    },
+    {
+      "id": "...",
+      "type": "live_session_invitation",
+      "title": "Jane invited you to a live quiz",
+      "message": "Join 'Friday Study Session' and compete with your friends!",
+      "data": {
+        "session_id": "...",
+        "inviter_id": "...",
+        "inviter_name": "Jane Smith",
+        "access_code": "ABC123",
+        "scheduled_at": "2024-01-28T19:00:00Z"
+      },
+      "is_read": false,
+      "created_at": "2024-01-27T15:45:00Z"
+    }
+  ],
+  "unread_count": 5,
+  "total": 24
+}
+
+PATCH  /api/v1/notifications/:id/read
+Response: { "message": "Notification marked as read" }
+
+PATCH  /api/v1/notifications/read-all
+Response: { "message": "All notifications marked as read", "count": 5 }
+
+DELETE /api/v1/notifications/:id
+Response: { "message": "Notification deleted" }
+
+GET    /api/v1/notifications/unread-count
+Response: { "unread_count": 5 }
+```
+
+### Optional: Real-Time WebSocket Delivery
+
+```go
+// WebSocket connection for real-time notifications
+// Endpoint: WS /api/v1/notifications/ws
+
+// When user connects
+func NotificationWebSocketHandler(c *gin.Context) {
+    userID := getUserIDFromToken(c)
+    conn := upgradeToWebSocket(c)
+
+    // Register connection in hub
+    notificationHub.Register(userID, conn)
+
+    // Listen for disconnect
+    defer func() {
+        notificationHub.Unregister(userID, conn)
+    }()
+
+    // Keep connection alive
+    for {
+        // Ping/pong to keep connection alive
+        time.Sleep(30 * time.Second)
+        conn.WriteMessage(websocket.PingMessage, []byte{})
+    }
+}
+
+// When notification is created
+func (s *NotificationService) sendWebSocketNotification(userID uuid.UUID, notificationID uuid.UUID) {
+    // Check if user is connected via WebSocket
+    if conn := notificationHub.GetConnection(userID); conn != nil {
+        // Fetch the notification
+        notification := s.GetNotificationByID(notificationID)
+
+        // Send via WebSocket
+        conn.WriteJSON(map[string]interface{}{
+            "type": "new_notification",
+            "notification": notification,
+        })
+    }
+}
+```
+
+### Frontend Integration
+
+```typescript
+// Example frontend code
+
+// 1. Polling approach (simpler)
+setInterval(async () => {
+  const response = await fetch('/api/v1/notifications/unread-count');
+  const { unread_count } = await response.json();
+  updateNotificationBadge(unread_count);
+}, 30000); // Poll every 30 seconds
+
+// 2. WebSocket approach (real-time)
+const ws = new WebSocket('ws://localhost:8080/api/v1/notifications/ws');
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  if (data.type === 'new_notification') {
+    // Show toast notification
+    showToast(data.notification.title, data.notification.message);
+
+    // Update badge count
+    incrementNotificationBadge();
+
+    // Add to notification list
+    addNotificationToList(data.notification);
+  }
+};
+```
+
+### Performance Considerations
+
+1. **Bulk Inserts**: Use `unnest()` for creating notifications for multiple users
+2. **Indexing**: Proper indexes on `user_id`, `is_read`, `created_at`
+3. **Pagination**: Always paginate notification lists
+4. **Cleanup**: Periodic job to delete old read notifications (e.g., > 90 days)
+5. **Rate Limiting**: Prevent notification spam
+
+```go
+// Cleanup worker (runs daily)
+func NotificationCleanupWorker() {
+    for {
+        time.Sleep(24 * time.Hour)
+
+        // Delete read notifications older than 90 days
+        query := `
+            DELETE FROM notifications
+            WHERE is_read = true AND created_at < NOW() - INTERVAL '90 days'
+        `
+        db.Exec(query)
+    }
+}
+```
 
 ---
 
@@ -522,19 +1426,22 @@ GET /api/v1/educator/quizzes/:id/questions/analytics
 
 ---
 
-### Phase 7: Live Quiz Sessions (Week 7-8)
+### Phase 7: Unified Live Quiz Sessions (Week 7-8)
 
 #### Goals
-- Real-time competitive quiz gameplay
-- Synchronized quiz sessions with live leaderboards
-- Enhanced engagement through live events
+- Build unified live session system supporting BOTH use cases
+- Educator public sessions with manual host control
+- User private sessions with automatic progression
+- Real-time competitive gameplay with live leaderboards
+- Post-session detailed analysis for all participants
 
 #### Tasks
 
 **7.1 Database Schema**
-- Migration: Create `live_sessions` table
+- Migration: Create `live_sessions` table (unified schema)
 - Migration: Create `live_session_participants` table
-- Migration: Create `live_session_answers` table (or extend user_answers)
+- Migration: Create `live_session_answers` table
+- Migration: Create `live_session_invitations` table (for private sessions)
 
 **7.2 Live Session Models**
 ```go
@@ -543,17 +1450,34 @@ GET /api/v1/educator/quizzes/:id/questions/analytics
 type LiveSession struct {
     ID              uuid.UUID
     QuizID          uuid.UUID
-    EducatorID      uuid.UUID
+    CreatorID       uuid.UUID    // ANY user, not just educators
+
+    // Session type determines behavior
+    SessionType     string       // 'public' or 'private'
+
+    // Basic info
     Title           string
     Description     string
-    ScheduledAt     time.Time    // When session is scheduled
-    StartedAt       *time.Time   // Actual start time
-    EndedAt         *time.Time   // Actual end time
-    Status          string       // scheduled, live, completed, cancelled
-    MaxParticipants *int         // Optional capacity limit
-    EntryCode       string       // Optional entry code for private sessions
-    IsPublic        bool         // Public vs private session
-    Meta            JSONB
+
+    // Timing (flexible)
+    ScheduledAt     *time.Time   // NULL = instant, NOT NULL = scheduled
+    StartedAt       *time.Time
+    EndedAt         *time.Time
+    Status          string       // waiting, live, completed, cancelled
+
+    // Access control
+    AccessCode      string       // Generated for private sessions
+    IsDiscoverable  bool         // Public listing?
+    MaxParticipants *int
+
+    // Progression mode
+    ProgressionMode string       // 'manual' or 'automatic'
+    QuestionTimerSeconds int     // For automatic mode
+    CurrentQuestionIndex int
+
+    // Config (flexible for future features)
+    Config          JSONB
+
     CreatedAt       time.Time
     UpdatedAt       time.Time
 }
@@ -563,35 +1487,50 @@ type LiveSessionParticipant struct {
     SessionID     uuid.UUID
     UserID        uuid.UUID
     JoinedAt      time.Time
+    LeftAt        *time.Time
     CurrentScore  int
     Rank          int
     Status        string  // active, disconnected, completed
 }
+
+type LiveSessionInvitation struct {
+    ID          uuid.UUID
+    SessionID   uuid.UUID
+    InviterID   uuid.UUID
+    InviteeID   uuid.UUID
+    Status      string    // pending, accepted, declined
+    InvitedAt   time.Time
+    RespondedAt *time.Time
+}
 ```
 
 **7.3 Live Session Service**
-- Create/schedule live sessions
-- Start live session (educator control)
+- Create/schedule live sessions (unified)
+- Access control based on session_type
 - Participant join/leave management
 - Real-time score calculation and ranking
-- Question progression control (educator advances questions)
+- Manual progression (for educators)
+- Automatic progression (for user private sessions)
+- Session invitation system
 - Session end and final results
 
 **7.4 WebSocket/Real-Time Architecture**
 ```
 ┌─────────────────┐         ┌──────────────────┐
 │   Participants  │ ◄─────► │  WebSocket Hub   │
-│   (Learners)    │         │  (Go Channels)   │
+│   (All Users)   │         │  (Go Channels)   │
 └─────────────────┘         └────────┬─────────┘
                                      │
 ┌─────────────────┐                  │
-│    Educator     │ ◄────────────────┤
-│   (Host)        │                  │
+│  Session Host   │ ◄────────────────┤
+│ (Educator/User) │                  │
 └─────────────────┘                  │
                                      ▼
                             ┌─────────────────┐
                             │  Session Manager│
                             │  (Worker)       │
+                            │  - Manual mode  │
+                            │  - Auto mode    │
                             └────────┬────────┘
                                      │
                             ┌────────▼────────┐
@@ -600,105 +1539,278 @@ type LiveSessionParticipant struct {
                             └─────────────────┘
 ```
 
-**7.5 Real-Time Events**
+**7.5 Real-Time Events (Unified)**
 - `session_started`: Notify all participants session is live
 - `question_revealed`: Show next question to all
+- `timer_update`: Countdown updates (automatic mode only)
+- `question_auto_advance`: Auto-progression event (automatic mode)
 - `answer_submitted`: Update leaderboard
 - `question_ended`: Show correct answer and stats
 - `session_ended`: Final leaderboard and results
 - `participant_joined`: Update participant count
+- `participant_left`: Update participant count
 
-**7.6 API Endpoints**
+**7.6 API Endpoints (Unified)**
 ```
-# Educator endpoints
-POST   /api/v1/educator/live-sessions             # Create/schedule live session
-GET    /api/v1/educator/live-sessions             # List my live sessions
-GET    /api/v1/educator/live-sessions/:id         # Get session details
-PATCH  /api/v1/educator/live-sessions/:id         # Update session
-DELETE /api/v1/educator/live-sessions/:id         # Cancel session
-POST   /api/v1/educator/live-sessions/:id/start   # Start the session
-POST   /api/v1/educator/live-sessions/:id/next    # Move to next question
-POST   /api/v1/educator/live-sessions/:id/end     # End the session
+# ========================================
+# SESSION CREATION (UNIFIED)
+# ========================================
 
-# Participant endpoints
-GET    /api/v1/live-sessions                      # List upcoming/live sessions
-GET    /api/v1/live-sessions/:id                  # Get session info
-POST   /api/v1/live-sessions/:id/join             # Join session
-POST   /api/v1/live-sessions/:id/leave            # Leave session
+POST   /api/v1/live-sessions
+Body: {
+  "quiz_id": "...",
+  "title": "...",
+  "description": "...",
+  "session_type": "public" | "private",
+  "scheduled_at": "2024-02-01T19:00:00Z" | null,  // null = instant
+  "progression_mode": "manual" | "automatic",
+  "question_timer_seconds": 30,  // For automatic mode
+  "max_participants": 50,
+  "is_discoverable": true | false
+}
+# Validation:
+# - If session_type='public', creator must be educator
+# - If session_type='public', scheduled_at required
+# - If session_type='private', generates access_code
+Response: {
+  "session": {...},
+  "access_code": "XYZ123"  // Only for private sessions
+}
+
+# ========================================
+# SESSION INVITATION (PRIVATE ONLY)
+# ========================================
+
+POST   /api/v1/live-sessions/:id/invite
+Body: { "user_ids": ["uuid1", "uuid2", ...] }
+Response: { "message": "Invitations sent", "invited_count": 5 }
+# Creates in-app notifications for invited users
+
+GET    /api/v1/live-sessions/:id/invitations
+Response: { "invitations": [...] }
+
+# ========================================
+# SESSION DISCOVERY
+# ========================================
+
+# Public discoverable sessions
+GET    /api/v1/live-sessions/public
+Query: ?status=upcoming,live&page=1
+Response: { "sessions": [...] }
+
+# My created sessions
+GET    /api/v1/live-sessions/mine
+Response: { "sessions": [...] }  // All my sessions (public + private)
+
+# Sessions I'm invited to
+GET    /api/v1/live-sessions/invitations
+Response: { "sessions": [...] }  // Private sessions I'm invited to
+
+# ========================================
+# SESSION JOIN/LEAVE
+# ========================================
+
+GET    /api/v1/live-sessions/:id
+Response: { "session": {...}, "can_join": true, "is_joined": false }
+
+POST   /api/v1/live-sessions/:id/join
+Body: { "access_code": "XYZ123" }  // Required for private, ignored for public
+Response: { "message": "Joined session", "participant": {...} }
+
+POST   /api/v1/live-sessions/:id/leave
+Response: { "message": "Left session" }
+
+# ========================================
+# SESSION CONTROL (MANUAL MODE ONLY)
+# ========================================
+
+POST   /api/v1/live-sessions/:id/start
+POST   /api/v1/live-sessions/:id/next-question
+POST   /api/v1/live-sessions/:id/end
+# Only works if progression_mode='manual' and user is creator
+
+# ========================================
+# REAL-TIME
+# ========================================
+
+WS     /api/v1/live-sessions/:id/ws               # WebSocket connection
 GET    /api/v1/live-sessions/:id/leaderboard      # Current leaderboard
 
-# WebSocket endpoint
-WS     /api/v1/live-sessions/:id/ws               # WebSocket connection
+# ========================================
+# POST-SESSION ANALYTICS
+# ========================================
+
+GET    /api/v1/live-sessions/:id/results
+Response: {
+  "session": {...},
+  "final_leaderboard": [...],
+  "my_performance": {...},
+
+  // For public sessions (educator view)
+  "detailed_analytics": {...},
+
+  // For private sessions (all participants can see)
+  "participant_details": [
+    {
+      "user": {...},
+      "score": 850,
+      "rank": 3,
+      "answers": [
+        {
+          "question": {...},
+          "answer": {...},
+          "is_correct": true,
+          "time_taken_ms": 4500
+        }
+      ]
+    }
+  ]
+}
 ```
 
-**7.7 Live Session Flow**
+**7.7 Live Session Flows**
 
-**Setup Phase (Educator):**
-1. Educator creates live session linked to a quiz
-2. Sets scheduled time, optional entry code
-3. System sends notifications to followers
-4. Session shows in "Upcoming" list
+**Flow A: Educator Public Session (Manual Progression)**
+1. Educator creates public session with scheduled_at, progression_mode='manual'
+2. System notifies all followers
+3. Session appears in public discovery
+4. Participants join waiting room
+5. **Educator manually starts** session
+6. Question 1 revealed to all
+7. Participants submit answers
+8. **Educator manually advances** to Question 2
+9. Repeat until all questions completed
+10. **Educator manually ends** session or auto-ends after last question
+11. Final leaderboard shown
+12. Educator sees detailed analytics
 
-**Pre-Start Phase:**
-5. Participants can join waiting room
-6. Educator sees participant count in real-time
-7. Educator starts session when ready
+**Flow B: User Private Session (Automatic Progression)**
+1. User creates private session with scheduled_at (or null for instant), progression_mode='automatic'
+2. System generates access_code
+3. User invites friends via in-app notifications
+4. Invited users join via access code
+5. **Session auto-starts** at scheduled_at (or when host manually starts)
+6. Question 1 revealed with timer (e.g., 30 seconds)
+7. Timer counts down via WebSocket
+8. Participants submit answers
+9. **Timer auto-advances** to Question 2 when it reaches 0
+10. Repeat until all questions completed
+11. **Session auto-ends** after last question
+12. Final leaderboard and ALL participant details visible to everyone
 
-**Live Phase:**
-8. Question displayed to all participants simultaneously
-9. Timer starts (configurable per question)
-10. Participants submit answers in real-time
-11. Points awarded based on correctness + speed
-12. Leaderboard updates live
-13. Educator advances to next question
-14. Repeat until all questions completed
-
-**Post-Session:**
-15. Final leaderboard displayed
-16. Individual results saved
-17. Replay/review available
-18. Analytics generated for educator
-
-**7.8 Scoring System**
+**7.8 Scoring System (Same for Both)**
 - Base points for correct answer
 - Speed bonus (faster = more points)
 - Streak bonus (consecutive correct answers)
 - Example: `points = base_points * (1 + speed_factor) * streak_multiplier`
 
-**7.9 WebSocket Message Format**
-```json
-// Client → Server
-{
-  "type": "submit_answer",
-  "session_id": "uuid",
-  "question_id": "uuid",
-  "answer_id": "uuid",
-  "timestamp": "ISO8601"
-}
+**7.9 Automatic Progression Worker**
+```go
+// File: backend/livesession/worker/auto_progression.go
 
-// Server → Clients
-{
-  "type": "leaderboard_update",
-  "session_id": "uuid",
-  "leaderboard": [
-    {"user_id": "uuid", "name": "John", "score": 450, "rank": 1},
-    ...
-  ]
+// Background worker that handles automatic progression
+func AutoProgressionWorker(ctx context.Context) {
+    ticker := time.NewTicker(1 * time.Second)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ticker.C:
+            // Find all live sessions with automatic progression
+            sessions := getLiveAutomaticSessions()
+
+            for _, session := range sessions {
+                // Check if current question timer expired
+                if session.CurrentQuestionStartedAt.Add(
+                    time.Duration(session.QuestionTimerSeconds) * time.Second,
+                ).Before(time.Now()) {
+                    // Time's up! Advance to next question
+                    if session.CurrentQuestionIndex < session.TotalQuestions-1 {
+                        advanceToNextQuestion(session.ID)
+                        broadcastWebSocketEvent(session.ID, "question_auto_advance", ...)
+                    } else {
+                        // Last question completed, end session
+                        endSession(session.ID)
+                        broadcastWebSocketEvent(session.ID, "session_ended", ...)
+                    }
+                }
+
+                // Send timer updates every second
+                remainingSeconds := calculateRemainingSeconds(session)
+                broadcastWebSocketEvent(session.ID, "timer_update", map[string]int{
+                    "seconds_remaining": remainingSeconds,
+                })
+            }
+
+        case <-ctx.Done():
+            return
+        }
+    }
 }
 ```
 
-**7.10 Notification Integration**
-- Notify followers when educator schedules live session
-- Reminder notification 10 minutes before session starts
-- Push notification when session goes live
+**7.10 WebSocket Message Format**
+```json
+// Timer update (automatic progression only)
+{
+  "type": "timer_update",
+  "seconds_remaining": 15,
+  "question_index": 2
+}
+
+// Auto-advance event
+{
+  "type": "question_auto_advance",
+  "next_question": {...},
+  "next_question_index": 3
+}
+
+// Common events (both modes)
+{
+  "type": "session_started",
+  "session_id": "...",
+  "total_questions": 20
+}
+
+{
+  "type": "question_revealed",
+  "question": {...},
+  "index": 1,
+  "timer_seconds": 30  // null for manual mode
+}
+
+{
+  "type": "leaderboard_update",
+  "leaderboard": [
+    {"user_id": "...", "name": "John", "score": 450, "rank": 1},
+    ...
+  ]
+}
+
+{
+  "type": "session_ended",
+  "final_leaderboard": [...],
+  "session_id": "..."
+}
+```
+
+**7.11 Notification Integration**
+- Public sessions: Notify all followers when scheduled
+- Private sessions: Notify invited users
+- 10-minute reminders for all scheduled sessions
+- Session starting notifications
 
 #### Deliverables
-- ✅ Educators can create and host live quiz sessions
-- ✅ Real-time synchronized gameplay
+- ✅ Unified system supporting both educator public and user private sessions
+- ✅ Educators can create public sessions with manual control
+- ✅ ANY user can create private sessions with automatic progression
+- ✅ Real-time synchronized gameplay via WebSocket
 - ✅ Live leaderboard with speed-based scoring
-- ✅ WebSocket-based real-time communication
-- ✅ Post-session analytics and replay
-- ✅ Notification system for session events
+- ✅ User invitation system with in-app notifications
+- ✅ Post-session analytics (detailed for educators, transparent for private groups)
+- ✅ Access code system for private sessions
+- ✅ Automatic timer-based progression for private sessions
+- ✅ No code duplication between public and private session logic
 
 ---
 
@@ -949,34 +2061,75 @@ COMMENT ON COLUMN user_answers.attempt_number IS 'Which attempt of the quiz this
 COMMIT;
 ```
 
-### Migration 7: Create Live Sessions
+### Migration 7: Create Live Sessions (Unified Schema)
 
 ```sql
 -- File: backend/pkg/database/migrations/000027_create_live_sessions.up.sql
 
 BEGIN;
 
+-- ========================================
+-- Live Sessions (Unified for Public & Private)
+-- ========================================
+
 CREATE TABLE IF NOT EXISTS live_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     quiz_id UUID NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-    educator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- ANY user, not just educators
+
+    -- Session type determines behavior
+    session_type VARCHAR(20) NOT NULL,  -- 'public' or 'private'
+
+    -- Basic info
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    -- Timing (flexible)
+    scheduled_at TIMESTAMP WITH TIME ZONE,  -- NULL = instant, NOT NULL = scheduled
     started_at TIMESTAMP WITH TIME ZONE,
     ended_at TIMESTAMP WITH TIME ZONE,
-    status VARCHAR(50) NOT NULL DEFAULT 'scheduled',
+    status VARCHAR(50) NOT NULL DEFAULT 'waiting',  -- waiting, live, completed, cancelled
+
+    -- Access control
+    access_code VARCHAR(10),  -- Generated for private sessions
+    is_discoverable BOOLEAN DEFAULT false,  -- Public listing?
     max_participants INT CHECK (max_participants > 0),
-    entry_code VARCHAR(20), -- Optional code for private sessions
-    is_public BOOLEAN DEFAULT true,
+
+    -- Progression mode
+    progression_mode VARCHAR(20) NOT NULL,  -- 'manual' or 'automatic'
+    question_timer_seconds INT,  -- For automatic mode (e.g., 30 seconds per question)
     current_question_index INT DEFAULT 0,
-    meta JSONB DEFAULT '{}'::jsonb,
+    current_question_started_at TIMESTAMP WITH TIME ZONE,  -- For automatic timer
+
+    -- Config (flexible for future features)
+    config JSONB DEFAULT '{}'::jsonb,
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-    CHECK (status IN ('scheduled', 'live', 'completed', 'cancelled')),
-    CHECK (scheduled_at > NOW() OR status != 'scheduled')
+    -- Constraints
+    CHECK (session_type IN ('public', 'private')),
+    CHECK (progression_mode IN ('manual', 'automatic')),
+    CHECK (status IN ('waiting', 'live', 'completed', 'cancelled')),
+
+    -- Business rules
+    CONSTRAINT valid_public_session CHECK (
+        session_type = 'private' OR
+        (session_type = 'public' AND scheduled_at IS NOT NULL)
+    ),
+    CONSTRAINT valid_private_session CHECK (
+        session_type = 'public' OR
+        (session_type = 'private' AND access_code IS NOT NULL)
+    ),
+    CONSTRAINT valid_automatic_mode CHECK (
+        progression_mode = 'manual' OR
+        (progression_mode = 'automatic' AND question_timer_seconds IS NOT NULL)
+    )
 );
+
+-- ========================================
+-- Live Session Participants
+-- ========================================
 
 CREATE TABLE IF NOT EXISTS live_session_participants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -987,11 +2140,15 @@ CREATE TABLE IF NOT EXISTS live_session_participants (
     current_score INT DEFAULT 0,
     rank INT,
     status VARCHAR(50) NOT NULL DEFAULT 'active',
-    meta JSONB DEFAULT '{}'::jsonb,
+    config JSONB DEFAULT '{}'::jsonb,  -- For storing participant-specific config
 
     UNIQUE (session_id, user_id),
     CHECK (status IN ('active', 'disconnected', 'completed'))
 );
+
+-- ========================================
+-- Live Session Answers
+-- ========================================
 
 CREATE TABLE IF NOT EXISTS live_session_answers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1001,35 +2158,86 @@ CREATE TABLE IF NOT EXISTS live_session_answers (
     answer_id UUID REFERENCES answers(id) ON DELETE SET NULL,
     is_correct BOOLEAN,
     points_earned INT DEFAULT 0,
-    time_taken_ms INT NOT NULL, -- Milliseconds to answer
+    time_taken_ms INT NOT NULL,  -- Milliseconds to answer
     answered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
     UNIQUE (session_id, participant_id, question_id)
 );
 
--- Indexes for live sessions
-CREATE INDEX idx_live_sessions_educator_id ON live_sessions(educator_id);
+-- ========================================
+-- Live Session Invitations (for private sessions)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS live_session_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES live_sessions(id) ON DELETE CASCADE,
+    inviter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    invitee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending, accepted, declined
+    invited_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    responded_at TIMESTAMP WITH TIME ZONE,
+
+    UNIQUE (session_id, invitee_id),
+    CHECK (status IN ('pending', 'accepted', 'declined'))
+);
+
+-- ========================================
+-- Indexes for live_sessions
+-- ========================================
+
+CREATE INDEX idx_live_sessions_creator_id ON live_sessions(creator_id);
 CREATE INDEX idx_live_sessions_quiz_id ON live_sessions(quiz_id);
 CREATE INDEX idx_live_sessions_status ON live_sessions(status);
+CREATE INDEX idx_live_sessions_session_type ON live_sessions(session_type);
+CREATE INDEX idx_live_sessions_progression_mode ON live_sessions(progression_mode);
+CREATE INDEX idx_live_sessions_access_code ON live_sessions(access_code) WHERE access_code IS NOT NULL;
+CREATE INDEX idx_live_sessions_discoverable ON live_sessions(is_discoverable, status)
+  WHERE is_discoverable = true AND status IN ('waiting', 'live');
 CREATE INDEX idx_live_sessions_scheduled_at ON live_sessions(scheduled_at)
-  WHERE status = 'scheduled';
+  WHERE scheduled_at IS NOT NULL AND status = 'waiting';
 CREATE INDEX idx_live_sessions_started_at ON live_sessions(started_at DESC)
   WHERE status = 'live';
 
+-- ========================================
 -- Indexes for participants
+-- ========================================
+
 CREATE INDEX idx_live_session_participants_session_id ON live_session_participants(session_id);
 CREATE INDEX idx_live_session_participants_user_id ON live_session_participants(user_id);
 CREATE INDEX idx_live_session_participants_rank ON live_session_participants(session_id, rank)
   WHERE status = 'active';
 
+-- ========================================
 -- Indexes for answers
+-- ========================================
+
 CREATE INDEX idx_live_session_answers_session_id ON live_session_answers(session_id);
 CREATE INDEX idx_live_session_answers_participant_id ON live_session_answers(participant_id);
 CREATE INDEX idx_live_session_answers_question_id ON live_session_answers(question_id);
 
-COMMENT ON TABLE live_sessions IS 'Real-time competitive quiz sessions hosted by educators';
+-- ========================================
+-- Indexes for invitations
+-- ========================================
+
+CREATE INDEX idx_live_session_invitations_session_id ON live_session_invitations(session_id);
+CREATE INDEX idx_live_session_invitations_invitee_id ON live_session_invitations(invitee_id, status)
+  WHERE status = 'pending';
+CREATE INDEX idx_live_session_invitations_inviter_id ON live_session_invitations(inviter_id);
+
+-- ========================================
+-- Comments
+-- ========================================
+
+COMMENT ON TABLE live_sessions IS 'Unified live quiz sessions - supports both educator public sessions and user private sessions';
+COMMENT ON COLUMN live_sessions.session_type IS 'public (educator only) or private (any user)';
+COMMENT ON COLUMN live_sessions.progression_mode IS 'manual (host controls) or automatic (timer-based)';
+COMMENT ON COLUMN live_sessions.scheduled_at IS 'NULL for instant sessions, NOT NULL for scheduled sessions';
+COMMENT ON COLUMN live_sessions.access_code IS 'Required for private sessions, used for joining';
+COMMENT ON COLUMN live_sessions.is_discoverable IS 'If true, session appears in public listings';
+
 COMMENT ON TABLE live_session_participants IS 'Participants/players in live sessions';
 COMMENT ON TABLE live_session_answers IS 'Answers submitted during live sessions with timing';
+COMMENT ON TABLE live_session_invitations IS 'Invitations for private sessions';
 
 COMMIT;
 ```
@@ -2373,7 +3581,7 @@ func BenchmarkLearnerAnalytics(b *testing.B) {
 
 ## Conclusion
 
-This comprehensive implementation plan follows the existing architecture patterns of the QuizCraft platform while introducing a powerful new educator role system. The phased approach ensures:
+This comprehensive implementation plan follows the existing architecture patterns of the QuizCraft platform while introducing a powerful new **Educator Role** and **Unified Live Quiz Session** system. The phased approach ensures:
 
 1. **Incremental Value**: Each phase delivers usable features
 2. **Risk Management**: Early phases validate core assumptions
@@ -2381,22 +3589,55 @@ This comprehensive implementation plan follows the existing architecture pattern
 4. **Flexibility**: Easy to adjust based on feedback
 5. **Quality**: Thorough testing at each phase
 
+### Educator Role Features
+
 The educator role transforms QuizCraft from a quiz-taking platform into a comprehensive learning ecosystem where content creators can:
-- **Self-promote** with automated validation
-- **Build audiences** through follow/notification system
-- **Host live sessions** for real-time competitive learning
-- **Track learner progress** with detailed analytics
+- **Self-promote** with automated validation (email verified + phone number)
+- **Build audiences** through follow/subscription system
+- **Receive in-app notifications** for engagement tracking
+- **Host public live sessions** with manual control
+- **Track learner progress** with detailed per-learner analytics
 - **Deliver impactful educational experiences** at scale
 
-Key differentiators:
+### Unified Live Session System
+
+The unified architecture supports TWO distinct use cases with ONE codebase:
+
+**Educator Public Sessions:**
+- Scheduled, discoverable events
+- Manual host control (educator advances questions)
+- Notifications sent to all followers
+- Post-session analytics for educator
+
+**User Private Sessions:**
+- Instant or scheduled
+- Automatic timer-based progression
+- Code-based access + user invitations
+- Post-session detailed analysis visible to ALL participants
+- Perfect for study groups and peer learning
+
+### Key Technical Achievements
+
+✅ **No Code Duplication**: Single unified system with `session_type` flag
+✅ **Smart Access Control**: Middleware validates based on session configuration
+✅ **Flexible Progression**: Manual (host) vs Automatic (timer) modes
+✅ **Unified WebSocket**: Same real-time infrastructure for both use cases
+✅ **Comprehensive Notifications**: In-app notification system with WebSocket delivery
+✅ **Invitation System**: Direct user invitations for private sessions
+✅ **Transparent Analytics**: Private session participants see everyone's detailed results
+
+### Platform Differentiators
+
 - ✅ **No approval bottleneck** - Instant educator access with basic verification
 - ✅ **In-app notifications** - Native engagement without email dependency
+- ✅ **Unified live sessions** - Both public events and private study groups
 - ✅ **Live competitive gameplay** - Real-time sessions with leaderboards
-- ✅ **Open access model** - All content remains public and accessible
+- ✅ **Open access model** - All educator content remains public and accessible
+- ✅ **User empowerment** - ANY user can create private live quiz sessions
 
 ---
 
-**Document Version**: 2.0
-**Last Updated**: 2026-01-27 (Updated with self-service promotion, live sessions, in-app notifications)
+**Document Version**: 3.0
+**Last Updated**: 2026-01-27 (Added unified live session architecture, private user sessions, invitation system, comprehensive in-app notifications)
 **Author**: AI Assistant
-**Status**: Updated Draft for Review
+**Status**: Ready for Implementation
