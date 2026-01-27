@@ -25,6 +25,9 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/internal/middleware"
 	"github.com/affanahmad024/quiz-craft/backend/internal/services"
 	"github.com/affanahmad024/quiz-craft/backend/internal/utils"
+	notificationdao "github.com/affanahmad024/quiz-craft/backend/notification/dao"
+	notificationworker "github.com/affanahmad024/quiz-craft/backend/notification/worker"
+	notificationws "github.com/affanahmad024/quiz-craft/backend/notification/websocket"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/database"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
@@ -56,6 +59,7 @@ var (
 	log        *logrus.Logger
 	jwtManager *utils.JWTManager
 	sqlDB      *sql.DB
+	wsHub      *notificationws.Hub
 )
 
 func main() {
@@ -105,6 +109,7 @@ func main() {
 	quizdao.Init(sqlDB)
 	aiagentdao.InitFileDAO(sqlDB)
 	aiagentdao.InitJobDAO(sqlDB)
+	notificationdao.Init(sqlDB)
 
 	// Initialize Auth Core with dependencies
 	log.Info("Initializing email service with Mailjet API")
@@ -121,6 +126,16 @@ func main() {
 	attemptWorker := quizworker.NewAttemptWorker()
 	go attemptWorker.Start(context.Background())
 	log.Info("Background worker started for attempt auto-submit")
+
+	// Initialize WebSocket hub for real-time notifications
+	wsHub = notificationws.NewHub()
+	go wsHub.Run()
+	log.Info("WebSocket hub started for real-time notifications")
+
+	// Start background worker for notification cleanup
+	notificationCleanupWorker := notificationworker.NewCleanupWorker()
+	go notificationCleanupWorker.Start(context.Background())
+	log.Info("Background worker started for notification cleanup")
 
 	// Start internal and external servers
 	go initInt()
@@ -268,6 +283,18 @@ func initExt() {
 		attempts.GET("/:id/results", api.GetAttemptResult) // Get attempt result
 		attempts.POST("/:id/answers", api.SubmitAnswer)    // Submit answer
 		attempts.POST("/:id/finish", api.FinishAttempt)    // Finish attempt
+	}
+
+	// Notification endpoints (protected)
+	notifications := v1.Group("/notifications")
+	notifications.Use(middleware.Auth(jwtManager))
+	{
+		notifications.GET("", api.GetNotifications)                         // List my notifications
+		notifications.GET("/unread-count", api.GetUnreadCount)              // Get unread count
+		notifications.PATCH("/:id/read", api.MarkNotificationAsRead)        // Mark as read
+		notifications.PATCH("/read-all", api.MarkAllNotificationsAsRead)    // Mark all as read
+		notifications.DELETE("/:id", api.DeleteNotification)                // Delete notification
+		notifications.GET("/ws", notificationws.ServeWebSocket(wsHub))      // WebSocket connection
 	}
 
 	// Add attempt routes to quizzes group
