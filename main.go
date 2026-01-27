@@ -25,6 +25,9 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/internal/middleware"
 	"github.com/affanahmad024/quiz-craft/backend/internal/services"
 	"github.com/affanahmad024/quiz-craft/backend/internal/utils"
+	livesessiondao "github.com/affanahmad024/quiz-craft/backend/livesession/dao"
+	livesessionworker "github.com/affanahmad024/quiz-craft/backend/livesession/worker"
+	livesessionws "github.com/affanahmad024/quiz-craft/backend/livesession/websocket"
 	notificationdao "github.com/affanahmad024/quiz-craft/backend/notification/dao"
 	notificationworker "github.com/affanahmad024/quiz-craft/backend/notification/worker"
 	notificationws "github.com/affanahmad024/quiz-craft/backend/notification/websocket"
@@ -55,11 +58,12 @@ import (
 // @description Type "Bearer" followed by a space and JWT token.
 
 var (
-	cfg        *config.Config
-	log        *logrus.Logger
-	jwtManager *utils.JWTManager
-	sqlDB      *sql.DB
-	wsHub      *notificationws.Hub
+	cfg              *config.Config
+	log              *logrus.Logger
+	jwtManager       *utils.JWTManager
+	sqlDB            *sql.DB
+	wsHub            *notificationws.Hub
+	liveSessionWsHub *livesessionws.Hub
 )
 
 func main() {
@@ -110,6 +114,7 @@ func main() {
 	aiagentdao.InitFileDAO(sqlDB)
 	aiagentdao.InitJobDAO(sqlDB)
 	notificationdao.Init(sqlDB)
+	livesessiondao.Init(sqlDB)
 
 	// Initialize Auth Core with dependencies
 	log.Info("Initializing email service with Mailjet API")
@@ -136,6 +141,16 @@ func main() {
 	notificationCleanupWorker := notificationworker.NewCleanupWorker()
 	go notificationCleanupWorker.Start(context.Background())
 	log.Info("Background worker started for notification cleanup")
+
+	// Initialize WebSocket hub for live sessions
+	liveSessionWsHub = livesessionws.NewHub()
+	go liveSessionWsHub.Run()
+	log.Info("WebSocket hub started for live sessions")
+
+	// Start background worker for session auto-start and auto-progression
+	sessionWorker := livesessionworker.NewSessionWorker(liveSessionWsHub)
+	go sessionWorker.Start(context.Background())
+	log.Info("Background worker started for live session management")
 
 	// Start internal and external servers
 	go initInt()
@@ -295,6 +310,26 @@ func initExt() {
 		notifications.PATCH("/read-all", api.MarkAllNotificationsAsRead)    // Mark all as read
 		notifications.DELETE("/:id", api.DeleteNotification)                // Delete notification
 		notifications.GET("/ws", notificationws.ServeWebSocket(wsHub))      // WebSocket connection
+	}
+
+	// Live Session endpoints (protected)
+	liveSessions := v1.Group("/live-sessions")
+	liveSessions.Use(middleware.Auth(jwtManager))
+	{
+		liveSessions.POST("", api.CreateLiveSession)                        // Create live session
+		liveSessions.GET("", api.ListMySessions)                            // List my created sessions
+		liveSessions.GET("/public", api.ListPublicSessions)                 // List public sessions
+		liveSessions.GET("/invitations", api.ListMySessionInvitations)      // List my invitations
+		liveSessions.GET("/:id", api.GetLiveSession)                        // Get session details
+		liveSessions.POST("/:id/join", api.JoinLiveSession)                 // Join session
+		liveSessions.POST("/:id/start", api.StartLiveSession)               // Start session (creator only)
+		liveSessions.POST("/:id/advance", api.AdvanceLiveQuestion)          // Advance to next question (creator only)
+		liveSessions.POST("/:id/end", api.EndLiveSession)                   // End session (creator only)
+		liveSessions.POST("/:id/answer", api.SubmitLiveAnswer)              // Submit answer
+		liveSessions.GET("/:id/leaderboard", api.GetLiveLeaderboard)        // Get current leaderboard
+		liveSessions.GET("/:id/results", api.GetLiveSessionResults)         // Get session results (after session ends)
+		liveSessions.POST("/:id/invite", api.InviteToLiveSession)           // Invite users to session (creator only)
+		liveSessions.GET("/:id/ws", livesessionws.ServeWebSocket(liveSessionWsHub)) // WebSocket connection for live session
 	}
 
 	// Add attempt routes to quizzes group
