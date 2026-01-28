@@ -12,6 +12,7 @@ import (
 	aiagentmodel "github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/services"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
+	educatorcore "github.com/affanahmad024/quiz-craft/backend/educator/core"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/core"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/model"
@@ -348,6 +349,16 @@ func PublishQuiz(c *gin.Context) {
 		commons.RespISE(c, err)
 		return
 	}
+
+	// Notify followers if user is an educator (async, don't block response)
+	go func() {
+		// Get quiz details for notification
+		quiz, qErr := core.GetQuiz(ctx, quizID, userID.String())
+		if qErr == nil {
+			// Notify followers about new quiz
+			educatorcore.NotifyFollowersNewQuiz(ctx, userID, quizID, quiz.Title, notificationServiceInstance)
+		}
+	}()
 
 	commons.Log(ctx, "[api.PublishQuiz::OK [time_taken=%v [ip=%s [quiz_id=%s",
 		time.Since(st), ip, quizID)

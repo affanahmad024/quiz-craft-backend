@@ -1,0 +1,5 @@
+BEGIN;
+
+DROP TABLE IF EXISTS educator_profiles CASCADE;
+
+COMMIT;

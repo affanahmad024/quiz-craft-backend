@@ -21,6 +21,7 @@ import (
 	authcore "github.com/affanahmad024/quiz-craft/backend/auth/core"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	_ "github.com/affanahmad024/quiz-craft/backend/docs" // Swagger docs
+	educatordao "github.com/affanahmad024/quiz-craft/backend/educator/dao"
 	"github.com/affanahmad024/quiz-craft/backend/internal/config"
 	"github.com/affanahmad024/quiz-craft/backend/internal/middleware"
 	"github.com/affanahmad024/quiz-craft/backend/internal/services"
@@ -115,6 +116,7 @@ func main() {
 	aiagentdao.InitJobDAO(sqlDB)
 	notificationdao.Init(sqlDB)
 	livesessiondao.Init(sqlDB)
+	educatordao.Init(sqlDB)
 
 	// Initialize Auth Core with dependencies
 	log.Info("Initializing email service with Mailjet API")
@@ -136,6 +138,9 @@ func main() {
 	wsHub = notificationws.NewHub()
 	go wsHub.Run()
 	log.Info("WebSocket hub started for real-time notifications")
+
+	// Initialize notification service for educator API
+	api.InitNotificationService(wsHub)
 
 	// Start background worker for notification cleanup
 	notificationCleanupWorker := notificationworker.NewCleanupWorker()
@@ -332,6 +337,41 @@ func initExt() {
 		liveSessions.GET("/:id/ws", livesessionws.ServeWebSocket(liveSessionWsHub)) // WebSocket connection for live session
 	}
 
+	// Educator endpoints (Phase 3)
+	// Public educator discovery
+	v1.GET("/educators", api.ListEducators)                  // List all educators (public)
+	v1.GET("/educators/search", api.SearchEducators)         // Search educators (public)
+	v1.GET("/educators/featured", api.GetFeaturedEducators)  // Get featured educators (public)
+	v1.GET("/educators/:id", api.GetEducatorProfile)         // Get educator profile (public)
+	v1.GET("/educators/:id/quizzes", api.GetEducatorQuizzes) // Get educator's quizzes (public)
+
+	// Protected educator endpoints
+	educatorAuth := v1.Group("/educator")
+	educatorAuth.Use(middleware.Auth(jwtManager))
+	{
+		educatorAuth.POST("/promote", api.PromoteToEducator)         // Promote to educator
+		educatorAuth.GET("/profile", api.GetMyEducatorProfile)       // Get my educator profile
+		educatorAuth.PATCH("/profile", api.UpdateMyEducatorProfile)  // Update my educator profile
+	}
+
+	// Educator-only endpoints
+	educatorOnly := v1.Group("/educator")
+	educatorOnly.Use(middleware.Auth(jwtManager))
+	educatorOnly.Use(middleware.RequireEducator())
+	{
+		educatorOnly.GET("/followers", api.GetMyFollowers)           // Get my followers
+		educatorOnly.GET("/followers/stats", api.GetMyFollowerStats) // Get follower stats
+	}
+
+	// Follow/unfollow endpoints (protected)
+	followAuth := v1.Group("")
+	followAuth.Use(middleware.Auth(jwtManager))
+	{
+		followAuth.POST("/educators/:id/follow", api.FollowEducator)     // Follow educator
+		followAuth.DELETE("/educators/:id/unfollow", api.UnfollowEducator) // Unfollow educator
+		followAuth.GET("/following", api.GetMyFollowing)                 // Get my followed educators
+	}
+
 	// Add attempt routes to quizzes group
 	quizzes.POST("/:id/attempts", api.StartAttempt) // Start quiz attempt
 	quizzes.GET("/:id/stats", api.GetQuizStats)     // Get quiz stats (creator only)
@@ -373,6 +413,7 @@ func initExt() {
 		admin.POST("/users/:id/enable", api.AdminEnableUser)   // Enable user
 		admin.POST("/users/:id/restore", api.RestoreUser)      // Restore deleted user
 		admin.DELETE("/users/:id", api.DeleteUser)             // Delete user (permanent)
+		admin.POST("/users/:id/demote", api.DemoteEducator)    // Demote educator to user
 
 		// Quiz Moderation
 		admin.GET("/quizzes", api.ListQuizzesAdmin)        // List all quizzes
