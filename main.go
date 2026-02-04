@@ -12,15 +12,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 
 	aiagentdao "github.com/affanahmad024/quiz-craft/backend/ai-agent/dao"
 	aiworker "github.com/affanahmad024/quiz-craft/backend/ai-agent/worker"
 	"github.com/affanahmad024/quiz-craft/backend/api"
 	authcore "github.com/affanahmad024/quiz-craft/backend/auth/core"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
-	_ "github.com/affanahmad024/quiz-craft/backend/docs" // Swagger docs
 	educatordao "github.com/affanahmad024/quiz-craft/backend/educator/dao"
 	"github.com/affanahmad024/quiz-craft/backend/internal/config"
 	"github.com/affanahmad024/quiz-craft/backend/internal/middleware"
@@ -38,25 +35,6 @@ import (
 	quizworker "github.com/affanahmad024/quiz-craft/backend/quiz/worker"
 	userdao "github.com/affanahmad024/quiz-craft/backend/user/dao"
 )
-
-// @title QuizCraft API
-// @version 1.0
-// @description A comprehensive quiz management and taking platform with AI-powered quiz generation
-// @termsOfService http://swagger.io/terms/
-
-// @contact.name API Support
-// @contact.email support@quizcraft.com
-
-// @license.name MIT
-// @license.url https://opensource.org/licenses/MIT
-
-// @host localhost:8080
-// @BasePath /api/v1
-
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-// @description Type "Bearer" followed by a space and JWT token.
 
 var (
 	cfg              *config.Config
@@ -172,9 +150,6 @@ func initInt() {
 	{
 		// Health check
 		v1.GET("/health", HealthCheck)
-
-		// Internal-only endpoints
-		// Add internal endpoints here as needed
 	}
 
 	intAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, "8081")
@@ -204,9 +179,6 @@ func initExt() {
 
 	// Health check (public)
 	v1.GET("/health", HealthCheck)
-
-	// Swagger documentation (public)
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Public auth endpoints
 	auth := v1.Group("/auth")
