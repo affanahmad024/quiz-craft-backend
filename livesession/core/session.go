@@ -32,14 +32,25 @@ func CreateSession(ctx context.Context, req model.CreateLiveSessionRequest, crea
 		return model.LiveSessionAPI{}, commons.BadInput("invalid-progression-mode")
 	}
 
+	// Validate timer mode
+	if req.TimerMode != model.TimerModePerQuestion && req.TimerMode != model.TimerModeWholeQuiz {
+		return model.LiveSessionAPI{}, commons.BadInput("invalid-timer-mode")
+	}
+
+	// Validate timer based on mode
+	if req.TimerMode == model.TimerModePerQuestion {
+		if req.QuestionTimerSeconds == nil || *req.QuestionTimerSeconds <= 0 {
+			return model.LiveSessionAPI{}, commons.BadInput("question-timer-required-for-per-question-mode")
+		}
+	} else if req.TimerMode == model.TimerModeWholeQuiz {
+		if req.WholeQuizTimerSeconds == nil || *req.WholeQuizTimerSeconds <= 0 {
+			return model.LiveSessionAPI{}, commons.BadInput("whole-quiz-timer-required-for-whole-quiz-mode")
+		}
+	}
+
 	// Public sessions must be scheduled
 	if req.SessionType == model.SessionTypePublic && req.ScheduledAt == nil {
 		return model.LiveSessionAPI{}, commons.BadInput("public-sessions-must-be-scheduled")
-	}
-
-	// Automatic mode requires timer
-	if req.ProgressionMode == model.ProgressionModeAutomatic && req.QuestionTimerSeconds <= 0 {
-		req.QuestionTimerSeconds = 30 // Default 30 seconds
 	}
 
 	// Verify quiz exists and user has access
@@ -252,6 +263,40 @@ func EndSession(ctx context.Context, sessionID, userID uuid.UUID) error {
 	}
 
 	commons.Log(ctx, "[core.EndSession::OK [session_id=%s", sessionID)
+	return nil
+}
+
+// EndSessionDueToTimeout ends a session automatically due to timer expiry (called by worker)
+func EndSessionDueToTimeout(ctx context.Context, sessionID uuid.UUID) error {
+	commons.Log(ctx, "[core.EndSessionDueToTimeout [session_id=%s", sessionID)
+
+	// Get session
+	sessionDAO, err := dao.FindSessionByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+
+	// Check status
+	if sessionDAO.Status != model.SessionStatusLive {
+		return commons.BadInput("session-not-live")
+	}
+
+	// End session
+	err = dao.EndSession(ctx, sessionID)
+	if err != nil {
+		commons.LogE(ctx, "[core.EndSessionDueToTimeout::EndErr [err=%v", err)
+		return err
+	}
+
+	// Mark all participants as completed
+	participants, _ := dao.ListParticipants(ctx, sessionID)
+	for _, p := range participants {
+		if p.Status == model.ParticipantStatusActive {
+			dao.UpdateParticipantStatus(ctx, p.ID, model.ParticipantStatusCompleted)
+		}
+	}
+
+	commons.Log(ctx, "[core.EndSessionDueToTimeout::OK [session_id=%s", sessionID)
 	return nil
 }
 

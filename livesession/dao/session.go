@@ -57,17 +57,28 @@ func CreateSession(ctx context.Context, req model.CreateLiveSessionRequest, crea
 		accessCodeSQL = sql.NullString{String: accessCode, Valid: true}
 	}
 
+	var questionTimerSQL sql.NullInt64
+	if req.QuestionTimerSeconds != nil {
+		questionTimerSQL = sql.NullInt64{Int64: int64(*req.QuestionTimerSeconds), Valid: true}
+	}
+
+	var wholeQuizTimerSQL sql.NullInt64
+	if req.WholeQuizTimerSeconds != nil {
+		wholeQuizTimerSQL = sql.NullInt64{Int64: int64(*req.WholeQuizTimerSeconds), Valid: true}
+	}
+
 	qry := `INSERT INTO live_sessions (quiz_id, creator_id, session_type, title, description, scheduled_at,
-			status, access_code, is_discoverable, max_participants, progression_mode, question_timer_seconds,
-			current_question_index, config, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, $13, NOW(), NOW())
+			status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+			question_timer_seconds, whole_quiz_timer_seconds, current_question_index, config, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, $15, NOW(), NOW())
 			RETURNING id, quiz_id, creator_id, session_type, title, description, scheduled_at, started_at,
-			ended_at, status, access_code, is_discoverable, max_participants, progression_mode,
-			question_timer_seconds, current_question_index, current_question_started_at, config, created_at, updated_at`
+			ended_at, status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+			question_timer_seconds, whole_quiz_timer_seconds, current_question_index, current_question_started_at,
+			quiz_started_at, config, created_at, updated_at`
 
 	err := db.QueryRowContext(ctx, qry, req.QuizID, creatorID, req.SessionType, req.Title, descriptionSQL,
 		scheduledAt, model.SessionStatusWaiting, accessCodeSQL, req.IsDiscoverable, maxParticipantsSQL,
-		req.ProgressionMode, req.QuestionTimerSeconds, configJSON).Scan(
+		req.ProgressionMode, req.TimerMode, questionTimerSQL, wholeQuizTimerSQL, configJSON).Scan(
 		&session.ID,
 		&session.QuizID,
 		&session.CreatorID,
@@ -82,9 +93,12 @@ func CreateSession(ctx context.Context, req model.CreateLiveSessionRequest, crea
 		&session.IsDiscoverable,
 		&session.MaxParticipants,
 		&session.ProgressionMode,
+		&session.TimerMode,
 		&session.QuestionTimerSeconds,
+		&session.WholeQuizTimerSeconds,
 		&session.CurrentQuestionIndex,
 		&session.CurrentQuestionStartedAt,
+		&session.QuizStartedAt,
 		&session.Config,
 		&session.CreatedAt,
 		&session.UpdatedAt,
@@ -105,8 +119,9 @@ func FindSessionByID(ctx context.Context, sessionID uuid.UUID) (model.LiveSessio
 
 	session := model.LiveSessionDAO{}
 	qry := `SELECT id, quiz_id, creator_id, session_type, title, description, scheduled_at, started_at,
-			ended_at, status, access_code, is_discoverable, max_participants, progression_mode,
-			question_timer_seconds, current_question_index, current_question_started_at, config, created_at, updated_at
+			ended_at, status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+			question_timer_seconds, whole_quiz_timer_seconds, current_question_index, current_question_started_at,
+			quiz_started_at, config, created_at, updated_at
 			FROM live_sessions
 			WHERE id = $1`
 
@@ -125,9 +140,12 @@ func FindSessionByID(ctx context.Context, sessionID uuid.UUID) (model.LiveSessio
 		&session.IsDiscoverable,
 		&session.MaxParticipants,
 		&session.ProgressionMode,
+		&session.TimerMode,
 		&session.QuestionTimerSeconds,
+		&session.WholeQuizTimerSeconds,
 		&session.CurrentQuestionIndex,
 		&session.CurrentQuestionStartedAt,
+		&session.QuizStartedAt,
 		&session.Config,
 		&session.CreatedAt,
 		&session.UpdatedAt,
@@ -150,8 +168,9 @@ func FindSessionByAccessCode(ctx context.Context, accessCode string) (model.Live
 
 	session := model.LiveSessionDAO{}
 	qry := `SELECT id, quiz_id, creator_id, session_type, title, description, scheduled_at, started_at,
-			ended_at, status, access_code, is_discoverable, max_participants, progression_mode,
-			question_timer_seconds, current_question_index, current_question_started_at, config, created_at, updated_at
+			ended_at, status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+			question_timer_seconds, whole_quiz_timer_seconds, current_question_index, current_question_started_at,
+			quiz_started_at, config, created_at, updated_at
 			FROM live_sessions
 			WHERE access_code = $1`
 
@@ -170,9 +189,12 @@ func FindSessionByAccessCode(ctx context.Context, accessCode string) (model.Live
 		&session.IsDiscoverable,
 		&session.MaxParticipants,
 		&session.ProgressionMode,
+		&session.TimerMode,
 		&session.QuestionTimerSeconds,
+		&session.WholeQuizTimerSeconds,
 		&session.CurrentQuestionIndex,
 		&session.CurrentQuestionStartedAt,
+		&session.QuizStartedAt,
 		&session.Config,
 		&session.CreatedAt,
 		&session.UpdatedAt,
@@ -229,8 +251,8 @@ func ListSessions(ctx context.Context, filter model.SessionListFilter) ([]model.
 
 	// Get paginated results
 	qry := fmt.Sprintf(`SELECT id, quiz_id, creator_id, session_type, title, description, scheduled_at, started_at,
-						ended_at, status, access_code, is_discoverable, max_participants, progression_mode,
-						question_timer_seconds, current_question_index, current_question_started_at, config, created_at, updated_at
+						ended_at, status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+						question_timer_seconds, whole_quiz_timer_seconds, current_question_index, current_question_started_at, quiz_started_at, config, created_at, updated_at
 						FROM live_sessions %s
 						ORDER BY created_at DESC
 						LIMIT $%d OFFSET $%d`, where, argCount, argCount+1)
@@ -261,9 +283,12 @@ func ListSessions(ctx context.Context, filter model.SessionListFilter) ([]model.
 			&session.IsDiscoverable,
 			&session.MaxParticipants,
 			&session.ProgressionMode,
+			&session.TimerMode,
 			&session.QuestionTimerSeconds,
+			&session.WholeQuizTimerSeconds,
 			&session.CurrentQuestionIndex,
 			&session.CurrentQuestionStartedAt,
+			&session.QuizStartedAt,
 			&session.Config,
 			&session.CreatedAt,
 			&session.UpdatedAt,
@@ -298,8 +323,8 @@ func ListDiscoverableSessions(ctx context.Context, limit, offset int) ([]model.L
 
 	// Get paginated results
 	qry := fmt.Sprintf(`SELECT id, quiz_id, creator_id, session_type, title, description, scheduled_at, started_at,
-						ended_at, status, access_code, is_discoverable, max_participants, progression_mode,
-						question_timer_seconds, current_question_index, current_question_started_at, config, created_at, updated_at
+						ended_at, status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+						question_timer_seconds, whole_quiz_timer_seconds, current_question_index, current_question_started_at, quiz_started_at, config, created_at, updated_at
 						FROM live_sessions %s
 						ORDER BY scheduled_at ASC, created_at DESC
 						LIMIT $1 OFFSET $2`, where)
@@ -328,9 +353,12 @@ func ListDiscoverableSessions(ctx context.Context, limit, offset int) ([]model.L
 			&session.IsDiscoverable,
 			&session.MaxParticipants,
 			&session.ProgressionMode,
+			&session.TimerMode,
 			&session.QuestionTimerSeconds,
+			&session.WholeQuizTimerSeconds,
 			&session.CurrentQuestionIndex,
 			&session.CurrentQuestionStartedAt,
+			&session.QuizStartedAt,
 			&session.Config,
 			&session.CreatedAt,
 			&session.UpdatedAt,
@@ -374,7 +402,11 @@ func StartSession(ctx context.Context, sessionID uuid.UUID) error {
 	commons.Log(ctx, "[dao.StartSession [session_id=%s", sessionID)
 
 	qry := `UPDATE live_sessions
-			SET status = $1, started_at = NOW(), current_question_started_at = NOW(), updated_at = NOW()
+			SET status = $1,
+			    started_at = NOW(),
+			    current_question_started_at = CASE WHEN timer_mode = 'per_question' THEN NOW() ELSE NULL END,
+			    quiz_started_at = CASE WHEN timer_mode = 'whole_quiz' THEN NOW() ELSE NULL END,
+			    updated_at = NOW()
 			WHERE id = $2 AND status = $3`
 
 	result, err := db.ExecContext(ctx, qry, model.SessionStatusLive, sessionID, model.SessionStatusWaiting)
@@ -447,8 +479,9 @@ func GetScheduledSessions(ctx context.Context, beforeTime time.Time) ([]model.Li
 	sessions := []model.LiveSessionDAO{}
 
 	qry := `SELECT id, quiz_id, creator_id, session_type, title, description, scheduled_at, started_at,
-			ended_at, status, access_code, is_discoverable, max_participants, progression_mode,
-			question_timer_seconds, current_question_index, current_question_started_at, config, created_at, updated_at
+			ended_at, status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+			question_timer_seconds, whole_quiz_timer_seconds, current_question_index, current_question_started_at,
+			quiz_started_at, config, created_at, updated_at
 			FROM live_sessions
 			WHERE status = $1 AND scheduled_at IS NOT NULL AND scheduled_at <= $2
 			AND progression_mode = $3
@@ -479,9 +512,12 @@ func GetScheduledSessions(ctx context.Context, beforeTime time.Time) ([]model.Li
 			&session.IsDiscoverable,
 			&session.MaxParticipants,
 			&session.ProgressionMode,
+			&session.TimerMode,
 			&session.QuestionTimerSeconds,
+			&session.WholeQuizTimerSeconds,
 			&session.CurrentQuestionIndex,
 			&session.CurrentQuestionStartedAt,
+			&session.QuizStartedAt,
 			&session.Config,
 			&session.CreatedAt,
 			&session.UpdatedAt,
@@ -504,8 +540,9 @@ func GetLiveAutomaticSessions(ctx context.Context) ([]model.LiveSessionDAO, erro
 	sessions := []model.LiveSessionDAO{}
 
 	qry := `SELECT id, quiz_id, creator_id, session_type, title, description, scheduled_at, started_at,
-			ended_at, status, access_code, is_discoverable, max_participants, progression_mode,
-			question_timer_seconds, current_question_index, current_question_started_at, config, created_at, updated_at
+			ended_at, status, access_code, is_discoverable, max_participants, progression_mode, timer_mode,
+			question_timer_seconds, whole_quiz_timer_seconds, current_question_index, current_question_started_at,
+			quiz_started_at, config, created_at, updated_at
 			FROM live_sessions
 			WHERE status = $1 AND progression_mode = $2
 			ORDER BY started_at ASC`
@@ -534,9 +571,12 @@ func GetLiveAutomaticSessions(ctx context.Context) ([]model.LiveSessionDAO, erro
 			&session.IsDiscoverable,
 			&session.MaxParticipants,
 			&session.ProgressionMode,
+			&session.TimerMode,
 			&session.QuestionTimerSeconds,
+			&session.WholeQuizTimerSeconds,
 			&session.CurrentQuestionIndex,
 			&session.CurrentQuestionStartedAt,
+			&session.QuizStartedAt,
 			&session.Config,
 			&session.CreatedAt,
 			&session.UpdatedAt,

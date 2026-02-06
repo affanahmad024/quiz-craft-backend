@@ -158,5 +158,6 @@ const (
 	EventQuestionEnded         = "question_ended"
 	EventSessionEnded          = "session_ended"
 	EventTimerUpdate           = "timer_update"
+	EventWholeQuizTimerUpdate  = "whole_quiz_timer_update"
 	EventQuestionAutoAdvance   = "question_auto_advance"
 )

@@ -24,9 +24,12 @@ type LiveSessionDAO struct {
 	IsDiscoverable           bool
 	MaxParticipants          sql.NullInt64
 	ProgressionMode          string
+	TimerMode                string
 	QuestionTimerSeconds     int
+	WholeQuizTimerSeconds    sql.NullInt64
 	CurrentQuestionIndex     int
 	CurrentQuestionStartedAt sql.NullTime
+	QuizStartedAt            sql.NullTime
 	Config                   []byte // JSONB stored as bytes
 	CreatedAt                time.Time
 	UpdatedAt                time.Time
@@ -48,9 +51,12 @@ type LiveSessionAPI struct {
 	IsDiscoverable           bool                   `json:"is_discoverable"`
 	MaxParticipants          *int                   `json:"max_participants,omitempty"`
 	ProgressionMode          string                 `json:"progression_mode"`
-	QuestionTimerSeconds     int                    `json:"question_timer_seconds"`
+	TimerMode                string                 `json:"timer_mode"`
+	QuestionTimerSeconds     int                    `json:"question_timer_seconds,omitempty"`
+	WholeQuizTimerSeconds    *int                   `json:"whole_quiz_timer_seconds,omitempty"`
 	CurrentQuestionIndex     int                    `json:"current_question_index"`
 	CurrentQuestionStartedAt *string                `json:"current_question_started_at,omitempty"`
+	QuizStartedAt            *string                `json:"quiz_started_at,omitempty"`
 	Config                   map[string]interface{} `json:"config,omitempty"`
 	CreatedAt                string                 `json:"created_at"`
 	UpdatedAt                string                 `json:"updated_at"`
@@ -68,6 +74,7 @@ func (s *LiveSessionDAO) ToAPI() LiveSessionAPI {
 		Status:               s.Status,
 		IsDiscoverable:       s.IsDiscoverable,
 		ProgressionMode:      s.ProgressionMode,
+		TimerMode:            s.TimerMode,
 		QuestionTimerSeconds: s.QuestionTimerSeconds,
 		CurrentQuestionIndex: s.CurrentQuestionIndex,
 		CreatedAt:            s.CreatedAt.Format(time.RFC3339),
@@ -107,6 +114,16 @@ func (s *LiveSessionDAO) ToAPI() LiveSessionAPI {
 		api.CurrentQuestionStartedAt = &currentQuestionStartedAt
 	}
 
+	if s.QuizStartedAt.Valid {
+		quizStartedAt := s.QuizStartedAt.Time.Format(time.RFC3339)
+		api.QuizStartedAt = &quizStartedAt
+	}
+
+	if s.WholeQuizTimerSeconds.Valid {
+		wholeQuizTimerSeconds := int(s.WholeQuizTimerSeconds.Int64)
+		api.WholeQuizTimerSeconds = &wholeQuizTimerSeconds
+	}
+
 	// Parse JSONB config
 	if len(s.Config) > 0 {
 		json.Unmarshal(s.Config, &api.Config)
@@ -121,12 +138,14 @@ type CreateLiveSessionRequest struct {
 	Title                string                 `json:"title" binding:"required"`
 	Description          string                 `json:"description,omitempty"`
 	SessionType          string                 `json:"session_type" binding:"required"`
-	ScheduledAt          *string                `json:"scheduled_at,omitempty"`
-	ProgressionMode      string                 `json:"progression_mode" binding:"required"`
-	QuestionTimerSeconds int                    `json:"question_timer_seconds,omitempty"`
-	MaxParticipants      *int                   `json:"max_participants,omitempty"`
-	IsDiscoverable       bool                   `json:"is_discoverable"`
-	Config               map[string]interface{} `json:"config,omitempty"`
+	ScheduledAt           *string                `json:"scheduled_at,omitempty"`
+	ProgressionMode       string                 `json:"progression_mode" binding:"required"`
+	TimerMode             string                 `json:"timer_mode" binding:"required"`
+	QuestionTimerSeconds  *int                   `json:"question_timer_seconds,omitempty"`
+	WholeQuizTimerSeconds *int                   `json:"whole_quiz_timer_seconds,omitempty"`
+	MaxParticipants       *int                   `json:"max_participants,omitempty"`
+	IsDiscoverable        bool                   `json:"is_discoverable"`
+	Config                map[string]interface{} `json:"config,omitempty"`
 }
 
 // Session constants
@@ -141,4 +160,7 @@ const (
 
 	ProgressionModeManual    = "manual"
 	ProgressionModeAutomatic = "automatic"
+
+	TimerModePerQuestion = "per_question"
+	TimerModeWholeQuiz   = "whole_quiz"
 )

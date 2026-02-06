@@ -138,6 +138,16 @@ func (w *SessionWorker) ProcessAutomaticProgression(ctx context.Context) {
 
 // ProcessSession processes a single session for automatic progression
 func (w *SessionWorker) ProcessSession(ctx context.Context, session model.LiveSessionDAO) {
+	// Route to appropriate timer handler based on timer mode
+	if session.TimerMode == model.TimerModePerQuestion {
+		w.ProcessPerQuestionTimer(ctx, session)
+	} else if session.TimerMode == model.TimerModeWholeQuiz {
+		w.ProcessWholeQuizTimer(ctx, session)
+	}
+}
+
+// ProcessPerQuestionTimer handles per-question timer logic
+func (w *SessionWorker) ProcessPerQuestionTimer(ctx context.Context, session model.LiveSessionDAO) {
 	// Check if current question timer has expired
 	if !session.CurrentQuestionStartedAt.Valid {
 		return
@@ -167,12 +177,12 @@ func (w *SessionWorker) ProcessSession(ctx context.Context, session model.LiveSe
 	}
 
 	// Timer expired, advance to next question or end session
-	commons.Log(ctx, "[SessionWorker.ProcessSession] Timer expired for session_id=%s", session.ID)
+	commons.Log(ctx, "[SessionWorker.ProcessPerQuestionTimer] Timer expired for session_id=%s", session.ID)
 
 	// Get total questions
 	questions, err := quizdao.ListByQuizID(ctx, session.QuizID)
 	if err != nil {
-		commons.LogE(ctx, "[SessionWorker.ProcessSession::GetQuestionsErr [err=%v", err)
+		commons.LogE(ctx, "[SessionWorker.ProcessPerQuestionTimer::GetQuestionsErr [err=%v", err)
 		return
 	}
 
@@ -186,6 +196,46 @@ func (w *SessionWorker) ProcessSession(ctx context.Context, session model.LiveSe
 		// Advance to next question
 		w.AdvanceQuestion(ctx, session.ID, session.CurrentQuestionIndex+1, questions)
 	}
+}
+
+// ProcessWholeQuizTimer handles whole-quiz timer logic
+func (w *SessionWorker) ProcessWholeQuizTimer(ctx context.Context, session model.LiveSessionDAO) {
+	// Check if quiz timer started
+	if !session.QuizStartedAt.Valid {
+		return
+	}
+
+	// Get whole quiz timer duration
+	if !session.WholeQuizTimerSeconds.Valid {
+		return
+	}
+
+	timeElapsed := time.Since(session.QuizStartedAt.Time)
+	timerDuration := time.Duration(session.WholeQuizTimerSeconds.Int64) * time.Second
+
+	// Send timer updates every second
+	remainingSeconds := int(timerDuration.Seconds() - timeElapsed.Seconds())
+	if remainingSeconds >= 0 {
+		if w.wsHub != nil {
+			event := websocket.Event{
+				Type: websocket.EventWholeQuizTimerUpdate,
+				Data: map[string]interface{}{
+					"seconds_remaining": remainingSeconds,
+					"total_seconds":     session.WholeQuizTimerSeconds.Int64,
+				},
+			}
+			w.wsHub.BroadcastToSession(session.ID, event)
+		}
+	}
+
+	// Check if timer expired
+	if timeElapsed < timerDuration {
+		return
+	}
+
+	// Timer expired, end session immediately
+	commons.Log(ctx, "[SessionWorker.ProcessWholeQuizTimer] Timer expired for session_id=%s", session.ID)
+	w.EndSession(ctx, session.ID)
 }
 
 // AdvanceQuestion advances to the next question
