@@ -92,7 +92,7 @@ All 8 phases completed and production-ready!
 - **14 Database Tables** with optimized schemas
 - **69 Unit Tests** (auth, scoring, validation, statistics)
 - **70+ Manual Test Scenarios**
-- **2,300+ lines** of API integration documentation
+- **Comprehensive API documentation** covering all 105 endpoints
 - **100% Phase Completion** (8/8 phases)
 
 ## 🎯 Recent Enhancements
@@ -215,13 +215,11 @@ backend/
 │       ├── validation_test.go     # 28 validation tests
 │       └── statistics_test.go     # 12 statistics tests
 ├── docs/                          # Documentation
-│   ├── FRONTEND_INTEGRATION_GUIDE.md  # Complete API reference (64 endpoints)
-│   ├── DEPLOYMENT_GUIDE.md        # Production deployment guide
-│   ├── PHASE8_COMPLETION_SUMMARY.md
-│   └── testing/                   # Manual testing guides
-│       ├── MANUAL_TESTING_AUTH.md
-│       ├── MANUAL_TESTING_QUIZZES.md
-│       └── TESTING_SUMMARY.md
+│   ├── README.md                  # Documentation index
+│   ├── COMPLETE_API_REFERENCE.md  # Complete API reference (105 endpoints) ⭐
+│   ├── FRONTEND_INTEGRATION.md    # Integration guide with code examples
+│   ├── QUICKSTART.md              # Getting started guide
+│   └── EDUCATOR_ROLE_IMPLEMENTATION.md  # Architecture reference
 ├── nginx/                         # Nginx configuration
 │   ├── nginx.conf                 # Main config
 │   └── conf.d/
@@ -332,7 +330,7 @@ backend/
 - `GET /api/v1/health` - Health check with dependencies
 - `GET /api/v1/ping` - Simple ping
 
-**See [docs/FRONTEND_INTEGRATION_GUIDE.md](docs/FRONTEND_INTEGRATION_GUIDE.md) for complete API documentation with request/response examples**
+**See [docs/COMPLETE_API_REFERENCE.md](docs/COMPLETE_API_REFERENCE.md) for complete API documentation with all 105 endpoints and request/response examples**
 
 ## 🔧 Configuration
 
@@ -413,9 +411,7 @@ go test -cover ./tests/unit/...
 
 ### Manual Testing
 See comprehensive manual testing guides:
-- [Manual Testing - Auth](docs/testing/MANUAL_TESTING_AUTH.md) - 30+ scenarios
-- [Manual Testing - Quizzes](docs/testing/MANUAL_TESTING_QUIZZES.md) - 40+ scenarios
-- [Testing Summary](docs/testing/TESTING_SUMMARY.md) - Complete overview
+- Test all API endpoints using Swagger UI at `http://localhost:8080/swagger/index.html`
 
 ## 🚀 Production Deployment
 
@@ -447,25 +443,38 @@ curl http://your-domain.com/api/v1/health
 certbot certonly --standalone -d your-domain.com
 ```
 
-**See [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for complete deployment instructions**
+**See [.env.production.example](.env.production.example) for production environment configuration**
 
 ## 📖 Documentation
 
-### API Documentation
-- **[FRONTEND_INTEGRATION_GUIDE.md](docs/FRONTEND_INTEGRATION_GUIDE.md)** - Complete API reference with all 64 endpoints
-- **Swagger UI** - Interactive documentation at `http://localhost:8080/swagger/index.html`
+### 🚀 Quick Start
+- **[QUICKSTART.md](docs/QUICKSTART.md)** - Get started in 5 minutes
+- **Swagger UI** - Interactive API explorer at `http://localhost:8080/swagger/index.html`
 
-### Deployment
-- **[DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)** - Production deployment guide
+### 📚 API Documentation
+- **[COMPLETE_API_REFERENCE.md](docs/COMPLETE_API_REFERENCE.md)** ⭐ - **All 105 endpoints** with complete request/response formats
+  - Authentication, Users, Quizzes, Questions, Attempts
+  - AI Generation, Notifications, Live Sessions, Educators
+  - Search, Templates, Admin - Error codes and examples
+
+### 💻 Frontend Integration
+- **[FRONTEND_INTEGRATION.md](docs/FRONTEND_INTEGRATION.md)** - Practical integration guide
+  - React hooks and components
+  - WebSocket connections (Notifications, Live Sessions)
+  - Authentication flow with auto-refresh
+  - Service modules and ready-to-use examples
+
+### 🏗️ Architecture Reference
+- **[EDUCATOR_ROLE_IMPLEMENTATION.md](docs/EDUCATOR_ROLE_IMPLEMENTATION.md)** - System architecture
+  - Database schema design
+  - WebSocket infrastructure
+  - Live sessions architecture
+
+### 📋 Documentation Index
+- **[docs/README.md](docs/README.md)** - Complete documentation guide with all links
+
+### ⚙️ Deployment
 - **[.env.production.example](.env.production.example)** - Production environment template
-
-### Testing
-- **[TESTING_SUMMARY.md](docs/testing/TESTING_SUMMARY.md)** - Testing overview
-- **[MANUAL_TESTING_AUTH.md](docs/testing/MANUAL_TESTING_AUTH.md)** - Auth testing scenarios
-- **[MANUAL_TESTING_QUIZZES.md](docs/testing/MANUAL_TESTING_QUIZZES.md)** - Quiz testing scenarios
-
-### Implementation
-- **[PHASE8_COMPLETION_SUMMARY.md](docs/PHASE8_COMPLETION_SUMMARY.md)** - Phase 8 completion summary
 
 ## 🔒 Security Features
 
@@ -580,9 +589,9 @@ docker-compose -f deployments/docker/docker-compose.yml up -d
 ## 📞 Support
 
 For questions or issues:
-1. Check the [API Documentation](docs/FRONTEND_INTEGRATION_GUIDE.md)
-2. Review [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
-3. Check [Testing Documentation](docs/testing/TESTING_SUMMARY.md)
+1. Check the [Complete API Reference](docs/COMPLETE_API_REFERENCE.md) - All 105 endpoints
+2. Review [Frontend Integration Guide](docs/FRONTEND_INTEGRATION.md) - Code examples
+3. Check [Quick Start Guide](docs/QUICKSTART.md) - Get running in 5 minutes
 4. View Swagger UI at `/swagger/index.html`
 
 ## 📄 License
