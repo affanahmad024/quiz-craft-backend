@@ -271,6 +271,27 @@ func UpdateRole(ctx context.Context, id uuid.UUID, role string) error {
 	return nil
 }
 
+// UpdateLastLogin updates user's last login timestamp
+func UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
+	commons.Log(ctx, "[dao.UpdateLastLogin [id=%s", id)
+
+	qry := `UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+
+	result, err := db.ExecContext(ctx, qry, id)
+	if err != nil {
+		commons.LogE(ctx, "[dao.UpdateLastLogin::SQLErr [id=%s [err=%v", id, err)
+		return err
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return commons.NotFound("user-not-found")
+	}
+
+	commons.Log(ctx, "[dao.UpdateLastLogin::OK [id=%s", id)
+	return nil
+}
+
 // SoftDelete soft deletes a user
 func SoftDelete(ctx context.Context, id uuid.UUID) error {
 	commons.Log(ctx, "[dao.SoftDelete [id=%s", id)

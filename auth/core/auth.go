@@ -255,6 +255,12 @@ func Login(ctx context.Context, req model.LoginRequest) (model.LoginResponse, er
 	// Reset failed attempts on successful login
 	dao.ResetFailedAttempts(ctx, userDAO.ID)
 
+	// Update last login timestamp
+	if err := dao.UpdateLastLogin(ctx, userDAO.ID); err != nil {
+		commons.LogW(ctx, "[core.Login::UpdateLastLoginErr [user_id=%s [err=%v", userDAO.ID, err)
+		// Don't fail login if this fails, just log the error
+	}
+
 	// Generate tokens
 	accessToken, err := jwtManager.GenerateAccessToken(userDAO.ID, userDAO.Email)
 	if err != nil {
@@ -489,6 +495,12 @@ func RefreshToken(ctx context.Context, refreshToken string) (model.LoginResponse
 	if err != nil {
 		commons.LogE(ctx, "[core.RefreshToken::FindUserErr [user_id=%s [err=%v", claims.UserID, err)
 		return model.LoginResponse{}, commons.Unauthorized("user-not-found")
+	}
+
+	// Update last login timestamp (treating token refresh as activity)
+	if err := dao.UpdateLastLogin(ctx, userDAO.ID); err != nil {
+		commons.LogW(ctx, "[core.RefreshToken::UpdateLastLoginErr [user_id=%s [err=%v", userDAO.ID, err)
+		// Don't fail refresh if this fails, just log the error
 	}
 
 	// Generate new access token
