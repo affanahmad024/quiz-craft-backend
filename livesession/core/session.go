@@ -155,7 +155,7 @@ func JoinSession(ctx context.Context, sessionID, userID uuid.UUID, accessCode st
 	return participantAPI, sessionAPI, nil
 }
 
-// StartSession starts a session (manual mode)
+// StartSession starts a session manually (works for both manual and automatic progression modes)
 func StartSession(ctx context.Context, sessionID, userID uuid.UUID) error {
 	commons.Log(ctx, "[core.StartSession [session_id=%s [user_id=%s", sessionID, userID)
 
@@ -168,11 +168,6 @@ func StartSession(ctx context.Context, sessionID, userID uuid.UUID) error {
 	// Only creator can start
 	if sessionDAO.CreatorID.String() != userID.String() {
 		return commons.Forbidden("not-session-creator")
-	}
-
-	// Only manual mode allows manual start
-	if sessionDAO.ProgressionMode != model.ProgressionModeManual {
-		return commons.BadInput("session-uses-automatic-progression")
 	}
 
 	// Check status
