@@ -24,11 +24,12 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/internal/services"
 	"github.com/affanahmad024/quiz-craft/backend/internal/utils"
 	livesessiondao "github.com/affanahmad024/quiz-craft/backend/livesession/dao"
-	livesessionworker "github.com/affanahmad024/quiz-craft/backend/livesession/worker"
 	livesessionws "github.com/affanahmad024/quiz-craft/backend/livesession/websocket"
+	livesessionworker "github.com/affanahmad024/quiz-craft/backend/livesession/worker"
+	notificationcore "github.com/affanahmad024/quiz-craft/backend/notification/core"
 	notificationdao "github.com/affanahmad024/quiz-craft/backend/notification/dao"
-	notificationworker "github.com/affanahmad024/quiz-craft/backend/notification/worker"
 	notificationws "github.com/affanahmad024/quiz-craft/backend/notification/websocket"
+	notificationworker "github.com/affanahmad024/quiz-craft/backend/notification/worker"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/database"
 	"github.com/affanahmad024/quiz-craft/backend/pkg/logger"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
@@ -102,8 +103,16 @@ func main() {
 	authcore.Init(jwtManager, emailService)
 
 	log.Info("Starting servers...")
+
+	// Initialize WebSocket hub for real-time notifications
+	wsHub = notificationws.NewHub()
+	go wsHub.Run()
+	log.Info("WebSocket hub started for real-time notifications")
+
+	notificationService := notificationcore.NewNotificationService(wsHub)
+
 	// Start background worker for AI quiz generation
-	aiWorker := aiworker.NewQuizGeneratorWorker(sqlDB)
+	aiWorker := aiworker.NewQuizGeneratorWorker(sqlDB, notificationService)
 	go aiWorker.Start(context.Background())
 	log.Info("Background worker started for quiz generation")
 
@@ -112,13 +121,9 @@ func main() {
 	go attemptWorker.Start(context.Background())
 	log.Info("Background worker started for attempt auto-submit")
 
-	// Initialize WebSocket hub for real-time notifications
-	wsHub = notificationws.NewHub()
-	go wsHub.Run()
-	log.Info("WebSocket hub started for real-time notifications")
-
 	// Initialize notification service for educator API
 	api.InitNotificationService(wsHub)
+	api.SetNotificationService(notificationService)
 
 	// Start background worker for notification cleanup
 	notificationCleanupWorker := notificationworker.NewCleanupWorker()
@@ -281,31 +286,31 @@ func initExt() {
 	notifications := v1.Group("/notifications")
 	notifications.Use(middleware.Auth(jwtManager))
 	{
-		notifications.GET("", api.GetNotifications)                         // List my notifications
-		notifications.GET("/unread-count", api.GetUnreadCount)              // Get unread count
-		notifications.PATCH("/:id/read", api.MarkNotificationAsRead)        // Mark as read
-		notifications.PATCH("/read-all", api.MarkAllNotificationsAsRead)    // Mark all as read
-		notifications.DELETE("/:id", api.DeleteNotification)                // Delete notification
-		notifications.GET("/ws", notificationws.ServeWebSocket(wsHub))      // WebSocket connection
+		notifications.GET("", api.GetNotifications)                      // List my notifications
+		notifications.GET("/unread-count", api.GetUnreadCount)           // Get unread count
+		notifications.PATCH("/:id/read", api.MarkNotificationAsRead)     // Mark as read
+		notifications.PATCH("/read-all", api.MarkAllNotificationsAsRead) // Mark all as read
+		notifications.DELETE("/:id", api.DeleteNotification)             // Delete notification
+		notifications.GET("/ws", notificationws.ServeWebSocket(wsHub))   // WebSocket connection
 	}
 
 	// Live Session endpoints (protected)
 	liveSessions := v1.Group("/live-sessions")
 	liveSessions.Use(middleware.Auth(jwtManager))
 	{
-		liveSessions.POST("", api.CreateLiveSession)                        // Create live session
-		liveSessions.GET("", api.ListMySessions)                            // List my created sessions
-		liveSessions.GET("/public", api.ListPublicSessions)                 // List public sessions
-		liveSessions.GET("/invitations", api.ListMySessionInvitations)      // List my invitations
-		liveSessions.GET("/:id", api.GetLiveSession)                        // Get session details
-		liveSessions.POST("/:id/join", api.JoinLiveSession)                 // Join session
-		liveSessions.POST("/:id/start", api.StartLiveSession)               // Start session (creator only)
-		liveSessions.POST("/:id/advance", api.AdvanceLiveQuestion)          // Advance to next question (creator only)
-		liveSessions.POST("/:id/end", api.EndLiveSession)                   // End session (creator only)
-		liveSessions.POST("/:id/answer", api.SubmitLiveAnswer)              // Submit answer
-		liveSessions.GET("/:id/leaderboard", api.GetLiveLeaderboard)        // Get current leaderboard
-		liveSessions.GET("/:id/results", api.GetLiveSessionResults)         // Get session results (after session ends)
-		liveSessions.POST("/:id/invite", api.InviteToLiveSession)           // Invite users to session (creator only)
+		liveSessions.POST("", api.CreateLiveSession)                                // Create live session
+		liveSessions.GET("", api.ListMySessions)                                    // List my created sessions
+		liveSessions.GET("/public", api.ListPublicSessions)                         // List public sessions
+		liveSessions.GET("/invitations", api.ListMySessionInvitations)              // List my invitations
+		liveSessions.GET("/:id", api.GetLiveSession)                                // Get session details
+		liveSessions.POST("/:id/join", api.JoinLiveSession)                         // Join session
+		liveSessions.POST("/:id/start", api.StartLiveSession)                       // Start session (creator only)
+		liveSessions.POST("/:id/advance", api.AdvanceLiveQuestion)                  // Advance to next question (creator only)
+		liveSessions.POST("/:id/end", api.EndLiveSession)                           // End session (creator only)
+		liveSessions.POST("/:id/answer", api.SubmitLiveAnswer)                      // Submit answer
+		liveSessions.GET("/:id/leaderboard", api.GetLiveLeaderboard)                // Get current leaderboard
+		liveSessions.GET("/:id/results", api.GetLiveSessionResults)                 // Get session results (after session ends)
+		liveSessions.POST("/:id/invite", api.InviteToLiveSession)                   // Invite users to session (creator only)
 		liveSessions.GET("/:id/ws", livesessionws.ServeWebSocket(liveSessionWsHub)) // WebSocket connection for live session
 	}
 
@@ -321,9 +326,9 @@ func initExt() {
 	educatorAuth := v1.Group("/educator")
 	educatorAuth.Use(middleware.Auth(jwtManager))
 	{
-		educatorAuth.POST("/promote", api.PromoteToEducator)         // Promote to educator
-		educatorAuth.GET("/profile", api.GetMyEducatorProfile)       // Get my educator profile
-		educatorAuth.PATCH("/profile", api.UpdateMyEducatorProfile)  // Update my educator profile
+		educatorAuth.POST("/promote", api.PromoteToEducator)        // Promote to educator
+		educatorAuth.GET("/profile", api.GetMyEducatorProfile)      // Get my educator profile
+		educatorAuth.PATCH("/profile", api.UpdateMyEducatorProfile) // Update my educator profile
 	}
 
 	// Educator-only endpoints
@@ -339,9 +344,9 @@ func initExt() {
 	followAuth := v1.Group("")
 	followAuth.Use(middleware.Auth(jwtManager))
 	{
-		followAuth.POST("/educators/:id/follow", api.FollowEducator)     // Follow educator
+		followAuth.POST("/educators/:id/follow", api.FollowEducator)       // Follow educator
 		followAuth.DELETE("/educators/:id/unfollow", api.UnfollowEducator) // Unfollow educator
-		followAuth.GET("/following", api.GetMyFollowing)                 // Get my followed educators
+		followAuth.GET("/following", api.GetMyFollowing)                   // Get my followed educators
 	}
 
 	// Add attempt routes to quizzes group

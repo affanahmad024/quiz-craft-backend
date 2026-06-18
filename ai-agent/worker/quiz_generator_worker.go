@@ -11,6 +11,8 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/services"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
+	notificationcore "github.com/affanahmad024/quiz-craft/backend/notification/core"
+	notificationmodel "github.com/affanahmad024/quiz-craft/backend/notification/model"
 	"github.com/google/uuid"
 )
 
@@ -22,16 +24,17 @@ const (
 
 // QuizGeneratorWorker processes quiz generation jobs
 type QuizGeneratorWorker struct {
-	db               *sql.DB
-	aiService        *core.AIService
-	fileParser       *services.FileParserService
-	quizGenerator    *services.QuizGeneratorService
-	stopChan         chan struct{}
-	concurrencySem   chan struct{}
+	db              *sql.DB
+	aiService       *core.AIService
+	fileParser      *services.FileParserService
+	quizGenerator   *services.QuizGeneratorService
+	notificationSvc *notificationcore.NotificationService
+	stopChan        chan struct{}
+	concurrencySem  chan struct{}
 }
 
 // NewQuizGeneratorWorker creates a new worker
-func NewQuizGeneratorWorker(db *sql.DB) *QuizGeneratorWorker {
+func NewQuizGeneratorWorker(db *sql.DB, notificationSvc *notificationcore.NotificationService) *QuizGeneratorWorker {
 	apiKey := os.Getenv("GOOGLE_AI_API_KEY")
 	if apiKey == "" {
 		panic("GOOGLE_AI_API_KEY environment variable is required")
@@ -43,12 +46,13 @@ func NewQuizGeneratorWorker(db *sql.DB) *QuizGeneratorWorker {
 	}
 
 	return &QuizGeneratorWorker{
-		db:             db,
-		aiService:      core.NewAIService(apiKey, model),
-		fileParser:     services.NewFileParserService(),
-		quizGenerator:  services.NewQuizGeneratorService(db),
-		stopChan:       make(chan struct{}),
-		concurrencySem: make(chan struct{}, MaxConcurrent),
+		db:              db,
+		aiService:       core.NewAIService(apiKey, model),
+		fileParser:      services.NewFileParserService(),
+		quizGenerator:   services.NewQuizGeneratorService(db),
+		notificationSvc: notificationSvc,
+		stopChan:        make(chan struct{}),
+		concurrencySem:  make(chan struct{}, MaxConcurrent),
 	}
 }
 
@@ -249,6 +253,8 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 		return
 	}
 
+	w.notifyJobCompleted(ctx, job, quizID, isAddition)
+
 	commons.Log(ctx, "[worker.ProcessJob::OK [job_id=%s [quiz_id=%s", job.ID, quizID)
 }
 
@@ -256,4 +262,36 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 func (w *QuizGeneratorWorker) failJob(ctx context.Context, jobID uuid.UUID, errorMessage string) {
 	commons.LogE(ctx, "[worker.failJob [job_id=%s [error=%s", jobID, errorMessage)
 	dao.FailJob(ctx, jobID, errorMessage)
+}
+
+func (w *QuizGeneratorWorker) notifyJobCompleted(ctx context.Context, job *model.GenerationJob, quizID string, isAddition bool) {
+	if w.notificationSvc == nil {
+		return
+	}
+
+	userID, err := uuid.Parse(job.UserID)
+	if err != nil {
+		commons.LogE(ctx, "[worker.notifyJobCompleted::InvalidUserID [job_id=%s [user_id=%s [err=%v", job.ID, job.UserID, err)
+		return
+	}
+
+	title := "AI quiz generated"
+	message := "Your AI quiz is ready."
+	action := "created"
+	if isAddition {
+		title = "AI questions added"
+		message = "Your AI-generated questions have been added to the quiz."
+		action = "updated"
+	}
+
+	_, err = w.notificationSvc.CreateNotification(ctx, userID, notificationmodel.NotificationTypeSystem, title, message, map[string]interface{}{
+		"job_id":        job.ID,
+		"quiz_id":       quizID,
+		"job_type":      job.JobType,
+		"action":        action,
+		"num_questions": job.Options.NumQuestions,
+	})
+	if err != nil {
+		commons.LogE(ctx, "[worker.notifyJobCompleted::CreateErr [job_id=%s [err=%v", job.ID, err)
+	}
 }

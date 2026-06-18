@@ -48,4 +48,6 @@ func UsrID(ctx context.Context) (uuid.UUID, bool) {
 // SetUserID sets user ID in gin context
 func SetUserID(c *gin.Context, userID uuid.UUID) {
 	c.Set(UserIDKey, userID)
+	ctx := context.WithValue(c.Request.Context(), UserIDKey, userID)
+	c.Request = c.Request.WithContext(ctx)
 }

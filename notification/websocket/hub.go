@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/affanahmad024/quiz-craft/backend/notification/model"
+	"github.com/google/uuid"
 )
 
 // Hub maintains active WebSocket connections and broadcasts messages
@@ -30,6 +30,11 @@ type Hub struct {
 type UserMessage struct {
 	UserID       uuid.UUID
 	Notification model.NotificationAPI
+}
+
+type websocketMessage struct {
+	Type string                `json:"type"`
+	Data model.NotificationAPI `json:"data"`
 }
 
 // NewHub creates a new WebSocket hub
@@ -94,7 +99,10 @@ func (h *Hub) broadcastToUser(message *UserMessage) {
 	defer h.mu.RUnlock()
 
 	if clients, ok := h.clients[message.UserID]; ok {
-		messageBytes, err := json.Marshal(message.Notification)
+		messageBytes, err := json.Marshal(websocketMessage{
+			Type: "notification",
+			Data: message.Notification,
+		})
 		if err != nil {
 			return
 		}

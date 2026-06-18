@@ -34,10 +34,15 @@ func Auth(jwtManager *utils.JWTManager) gin.HandlerFunc {
 			var err error
 			tokenString, err = c.Cookie("access_token")
 			if err != nil {
-				commons.LogW(ctx, "[middleware.Auth::TokenNotFound")
-				RespondWithError(c, http.StatusUnauthorized, "Authorization token not found", nil)
-				c.Abort()
-				return
+				if isWebSocketRequest(c) {
+					tokenString = c.Query("token")
+				}
+				if tokenString == "" {
+					commons.LogW(ctx, "[middleware.Auth::TokenNotFound")
+					RespondWithError(c, http.StatusUnauthorized, "Authorization token not found", nil)
+					c.Abort()
+					return
+				}
 			}
 		}
 
@@ -65,6 +70,10 @@ func Auth(jwtManager *utils.JWTManager) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func isWebSocketRequest(c *gin.Context) bool {
+	return strings.EqualFold(c.GetHeader("Upgrade"), "websocket")
 }
 
 // OptionalAuth is an optional authentication middleware

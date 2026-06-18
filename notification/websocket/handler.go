@@ -3,9 +3,9 @@ package websocket
 import (
 	"net/http"
 
+	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/affanahmad024/quiz-craft/backend/commons"
 )
 
 var upgrader = websocket.Upgrader{
@@ -20,7 +20,7 @@ var upgrader = websocket.Upgrader{
 // ServeWebSocket handles WebSocket requests from clients
 func ServeWebSocket(hub *Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := c.Request.Context()
+		ctx := commons.Ctx(c)
 
 		// Get user ID from context (set by auth middleware)
 		userID, exists := commons.UsrID(ctx)

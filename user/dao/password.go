@@ -82,7 +82,14 @@ func UpdatePasswordHash(ctx context.Context, userID uuid.UUID, newHash string, h
 
 	historyJSON, _ := json.Marshal(history)
 	qry := `UPDATE user_passwords
-			SET password_hash = $1, password_history = $2, last_password_change = NOW(), updated_at = NOW()
+			SET password_hash = $1,
+				password_history = $2,
+				meta = jsonb_set(
+					COALESCE(meta, '{}'::jsonb),
+					'{last_password_change}',
+					to_jsonb(NOW())
+				),
+				updated_at = NOW()
 			WHERE user_id = $3`
 
 	result, err := db.ExecContext(ctx, qry, newHash, historyJSON, userID)

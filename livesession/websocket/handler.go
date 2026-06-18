@@ -3,10 +3,10 @@ package websocket
 import (
 	"net/http"
 
+	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/affanahmad024/quiz-craft/backend/commons"
 )
 
 var upgrader = websocket.Upgrader{
@@ -21,20 +21,13 @@ var upgrader = websocket.Upgrader{
 // ServeWebSocket handles WebSocket requests for live sessions
 func ServeWebSocket(hub *Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ctx := c.Request.Context()
+		ctx := commons.Ctx(c)
 
 		// Get user ID from context (set by auth middleware)
-		userIDStr, exists := c.Get("user_id")
+		userID, exists := commons.UsrID(ctx)
 		if !exists {
 			commons.LogE(ctx, "[websocket.ServeWebSocket::Unauthorized")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			return
-		}
-
-		userID, err := uuid.Parse(userIDStr.(string))
-		if err != nil {
-			commons.LogE(ctx, "[websocket.ServeWebSocket::InvalidUserID [err=%v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid-user-id"})
 			return
 		}
 
