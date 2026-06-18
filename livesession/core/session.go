@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/dao"
@@ -51,6 +52,11 @@ func CreateSession(ctx context.Context, req model.CreateLiveSessionRequest, crea
 	// Public sessions must be scheduled
 	if req.SessionType == model.SessionTypePublic && req.ScheduledAt == nil {
 		return model.LiveSessionAPI{}, commons.BadInput("public-sessions-must-be-scheduled")
+	}
+	if req.ScheduledAt != nil {
+		if _, err := time.Parse(time.RFC3339, *req.ScheduledAt); err != nil {
+			return model.LiveSessionAPI{}, commons.BadInput("invalid-scheduled-at")
+		}
 	}
 
 	// Verify quiz exists and user has access
@@ -295,6 +301,37 @@ func EndSessionDueToTimeout(ctx context.Context, sessionID uuid.UUID) error {
 	return nil
 }
 
+// LeaveSession marks the current user as disconnected from a waiting/live session.
+func LeaveSession(ctx context.Context, sessionID, userID uuid.UUID) error {
+	commons.Log(ctx, "[core.LeaveSession [session_id=%s [user_id=%s", sessionID, userID)
+
+	sessionDAO, err := dao.FindSessionByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+
+	if sessionDAO.Status != model.SessionStatusWaiting && sessionDAO.Status != model.SessionStatusLive {
+		return commons.BadInput("session-not-active")
+	}
+
+	participantDAO, err := dao.FindParticipant(ctx, sessionID, userID)
+	if err != nil {
+		return commons.NotFound("not-a-participant")
+	}
+
+	if participantDAO.Status == model.ParticipantStatusDisconnected {
+		return nil
+	}
+
+	if err := dao.MarkParticipantLeft(ctx, participantDAO.ID); err != nil {
+		commons.LogE(ctx, "[core.LeaveSession::MarkLeftErr [err=%v", err)
+		return err
+	}
+
+	commons.Log(ctx, "[core.LeaveSession::OK [participant_id=%s", participantDAO.ID)
+	return nil
+}
+
 // SubmitAnswer submits an answer for a live session question
 func SubmitAnswer(ctx context.Context, sessionID, userID uuid.UUID, req model.SubmitAnswerRequest) (model.SubmitAnswerResponse, error) {
 	commons.Log(ctx, "[core.SubmitAnswer [session_id=%s [user_id=%s [question_id=%s", sessionID, userID, req.QuestionID)
@@ -324,17 +361,26 @@ func SubmitAnswer(ctx context.Context, sessionID, userID uuid.UUID, req model.Su
 		return response, commons.Conflict("already-answered")
 	}
 
-	// Get question and validate
-	_, err = quizdao.FindQuestionByID(ctx, req.QuestionID)
+	// Get question and validate it belongs to the session quiz.
+	question, err := quizdao.FindQuestionByID(ctx, req.QuestionID)
 	if err != nil {
 		return response, commons.NotFound("question-not-found")
+	}
+	if question.QuizID != sessionDAO.QuizID.String() {
+		return response, commons.BadInput("question-not-in-session-quiz")
 	}
 
 	// Check answer is correct
 	isCorrect := false
 	if req.AnswerID != nil {
 		answer, err := quizdao.FindAnswerByID(ctx, *req.AnswerID)
-		if err == nil && answer.IsCorrect {
+		if err != nil {
+			return response, commons.NotFound("answer-not-found")
+		}
+		if answer.QuestionID != req.QuestionID.String() {
+			return response, commons.BadInput("answer-not-for-question")
+		}
+		if answer.IsCorrect {
 			isCorrect = true
 		}
 	}

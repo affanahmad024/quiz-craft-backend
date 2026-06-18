@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/google/uuid"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/model"
+	"github.com/google/uuid"
 )
 
 // SaveAnswer saves a participant's answer
@@ -38,8 +38,7 @@ func SaveAnswer(ctx context.Context, sessionID, participantID, questionID uuid.U
 	)
 
 	if err != nil {
-		// Check for duplicate
-		if err.Error() == "pq: duplicate key value violates unique constraint \"live_session_answers_session_id_participant_id_question_id_key\"" {
+		if isUniqueViolation(err) {
 			return answer, commons.Conflict("already-answered")
 		}
 		commons.LogE(ctx, "[dao.SaveAnswer::SQLErr [err=%v", err)
@@ -48,6 +47,11 @@ func SaveAnswer(ctx context.Context, sessionID, participantID, questionID uuid.U
 
 	commons.Log(ctx, "[dao.SaveAnswer::OK [answer_id=%s", answer.ID)
 	return answer, nil
+}
+
+func isUniqueViolation(err error) bool {
+	return err != nil && (err.Error() == "pq: duplicate key value violates unique constraint \"live_session_answers_session_id_participant_id_question_id_key\"" ||
+		err.Error() == "ERROR: duplicate key value violates unique constraint \"live_session_answers_session_id_participant_id_question_id_key\" (SQLSTATE 23505)")
 }
 
 // GetParticipantAnswers gets all answers for a participant in a session

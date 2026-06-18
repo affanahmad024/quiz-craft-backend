@@ -133,6 +133,7 @@ func main() {
 	// Initialize WebSocket hub for live sessions
 	liveSessionWsHub = livesessionws.NewHub()
 	go liveSessionWsHub.Run()
+	api.SetLiveSessionHub(liveSessionWsHub)
 	log.Info("WebSocket hub started for live sessions")
 
 	// Start background worker for session auto-start and auto-progression
@@ -302,8 +303,10 @@ func initExt() {
 		liveSessions.GET("", api.ListMySessions)                                    // List my created sessions
 		liveSessions.GET("/public", api.ListPublicSessions)                         // List public sessions
 		liveSessions.GET("/invitations", api.ListMySessionInvitations)              // List my invitations
+		liveSessions.GET("/:id/questions", api.GetLiveSessionQuestions)             // Get playable session questions
 		liveSessions.GET("/:id", api.GetLiveSession)                                // Get session details
 		liveSessions.POST("/:id/join", api.JoinLiveSession)                         // Join session
+		liveSessions.POST("/:id/leave", api.LeaveLiveSession)                       // Leave session
 		liveSessions.POST("/:id/start", api.StartLiveSession)                       // Start session (creator only)
 		liveSessions.POST("/:id/advance", api.AdvanceLiveQuestion)                  // Advance to next question (creator only)
 		liveSessions.POST("/:id/end", api.EndLiveSession)                           // End session (creator only)

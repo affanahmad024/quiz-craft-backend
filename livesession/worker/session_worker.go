@@ -96,7 +96,7 @@ func (w *SessionWorker) StartSession(ctx context.Context, sessionID uuid.UUID) {
 	}
 
 	// Get first question to send in the event
-	questions, err := quizdao.ListByQuizID(ctx, session.QuizID)
+	questions, err := loadQuestionsWithAnswers(ctx, session.QuizID)
 	if err != nil || len(questions) == 0 {
 		commons.LogE(ctx, "[SessionWorker.StartSession::NoQuestions [session_id=%s", sessionID)
 		return
@@ -104,13 +104,22 @@ func (w *SessionWorker) StartSession(ctx context.Context, sessionID uuid.UUID) {
 
 	// Broadcast session started event
 	if w.wsHub != nil {
+		eventData := map[string]interface{}{
+			"session_id":      sessionID.String(),
+			"total_questions": len(questions),
+			"first_question":  questions[0],
+			"timer_mode":      session.TimerMode,
+		}
+		if session.QuestionTimerSeconds.Valid {
+			eventData["question_timer_seconds"] = session.QuestionTimerSeconds.Int64
+		}
+		if session.WholeQuizTimerSeconds.Valid {
+			eventData["whole_quiz_timer_seconds"] = session.WholeQuizTimerSeconds.Int64
+		}
+
 		event := websocket.Event{
 			Type: websocket.EventSessionStarted,
-			Data: map[string]interface{}{
-				"session_id":      sessionID.String(),
-				"total_questions": len(questions),
-				"first_question":  questions[0],
-			},
+			Data: eventData,
 		}
 		w.wsHub.BroadcastToSession(sessionID, event)
 	}
@@ -156,11 +165,11 @@ func (w *SessionWorker) ProcessPerQuestionTimer(ctx context.Context, session mod
 		return
 	}
 
-	timeElapsed := time.Since(session.CurrentQuestionStartedAt.Time)
+	timeElapsed := liveTimerElapsed(session.CurrentQuestionStartedAt.Time)
 	timerDuration := time.Duration(session.QuestionTimerSeconds.Int64) * time.Second
 
 	// Send timer updates every second
-	remainingSeconds := int(timerDuration.Seconds() - timeElapsed.Seconds())
+	remainingSeconds := liveTimerRemaining(session.CurrentQuestionStartedAt.Time, session.QuestionTimerSeconds.Int64)
 	if remainingSeconds >= 0 {
 		if w.wsHub != nil {
 			event := websocket.Event{
@@ -183,7 +192,7 @@ func (w *SessionWorker) ProcessPerQuestionTimer(ctx context.Context, session mod
 	commons.Log(ctx, "[SessionWorker.ProcessPerQuestionTimer] Timer expired for session_id=%s", session.ID)
 
 	// Get total questions
-	questions, err := quizdao.ListByQuizID(ctx, session.QuizID)
+	questions, err := loadQuestionsWithAnswers(ctx, session.QuizID)
 	if err != nil {
 		commons.LogE(ctx, "[SessionWorker.ProcessPerQuestionTimer::GetQuestionsErr [err=%v", err)
 		return
@@ -213,11 +222,11 @@ func (w *SessionWorker) ProcessWholeQuizTimer(ctx context.Context, session model
 		return
 	}
 
-	timeElapsed := time.Since(session.QuizStartedAt.Time)
+	timeElapsed := liveTimerElapsed(session.QuizStartedAt.Time)
 	timerDuration := time.Duration(session.WholeQuizTimerSeconds.Int64) * time.Second
 
 	// Send timer updates every second
-	remainingSeconds := int(timerDuration.Seconds() - timeElapsed.Seconds())
+	remainingSeconds := liveTimerRemaining(session.QuizStartedAt.Time, session.WholeQuizTimerSeconds.Int64)
 	if remainingSeconds >= 0 {
 		if w.wsHub != nil {
 			event := websocket.Event{
@@ -302,4 +311,69 @@ func (w *SessionWorker) EndSession(ctx context.Context, sessionID uuid.UUID) {
 	}
 
 	commons.Log(ctx, "[SessionWorker.EndSession::OK [session_id=%s", sessionID)
+}
+
+func loadQuestionsWithAnswers(ctx context.Context, quizID uuid.UUID) ([]*quizmodel.Question, error) {
+	questions, err := quizdao.ListByQuizID(ctx, quizID)
+	if err != nil {
+		return questions, err
+	}
+
+	for _, question := range questions {
+		questionID, err := uuid.Parse(question.ID)
+		if err != nil {
+			continue
+		}
+
+		answers, err := quizdao.ListByQuestionIDHideCorrect(ctx, questionID)
+		if err != nil {
+			commons.LogE(ctx, "[SessionWorker.loadQuestionsWithAnswers::AnswersErr [question_id=%s [err=%v", question.ID, err)
+			continue
+		}
+
+		question.Answers = answers
+	}
+
+	return questions, nil
+}
+
+func liveTimerElapsed(startedAt time.Time) time.Duration {
+	startedAt = normalizeLiveTimerStart(startedAt)
+	elapsed := time.Since(startedAt)
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
+}
+
+func liveTimerRemaining(startedAt time.Time, totalSeconds int64) int {
+	if totalSeconds <= 0 {
+		return 0
+	}
+
+	remaining := int(totalSeconds) - int(liveTimerElapsed(startedAt).Seconds())
+	if remaining < 0 {
+		return 0
+	}
+	if remaining > int(totalSeconds) {
+		return int(totalSeconds)
+	}
+	return remaining
+}
+
+func normalizeLiveTimerStart(startedAt time.Time) time.Time {
+	now := time.Now()
+	if !startedAt.After(now.Add(2 * time.Minute)) {
+		return startedAt
+	}
+
+	_, offsetSeconds := now.In(time.Local).Zone()
+	if offsetSeconds != 0 {
+		adjusted := startedAt.Add(-time.Duration(offsetSeconds) * time.Second)
+		if !adjusted.After(now.Add(2 * time.Minute)) {
+			return adjusted
+		}
+	}
+
+	return now
 }

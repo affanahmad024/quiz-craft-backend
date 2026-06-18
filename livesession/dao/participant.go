@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/google/uuid"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/model"
+	"github.com/google/uuid"
 )
 
 // AddParticipant adds a participant to a session
@@ -16,6 +16,10 @@ func AddParticipant(ctx context.Context, sessionID, userID uuid.UUID) (model.Par
 	participant := model.ParticipantDAO{}
 	qry := `INSERT INTO live_session_participants (session_id, user_id, joined_at, current_score, rank, status, created_at, updated_at)
 			VALUES ($1, $2, NOW(), 0, 0, $3, NOW(), NOW())
+			ON CONFLICT (session_id, user_id) DO UPDATE
+			SET status = $3,
+			    left_at = NULL,
+			    updated_at = NOW()
 			RETURNING id, session_id, user_id, joined_at, left_at, current_score, rank, status, created_at, updated_at`
 
 	err := db.QueryRowContext(ctx, qry, sessionID, userID, model.ParticipantStatusActive).Scan(
@@ -32,10 +36,6 @@ func AddParticipant(ctx context.Context, sessionID, userID uuid.UUID) (model.Par
 	)
 
 	if err != nil {
-		// Check for duplicate entry
-		if err.Error() == "pq: duplicate key value violates unique constraint \"live_session_participants_session_id_user_id_key\"" {
-			return participant, commons.Conflict("already-joined")
-		}
 		commons.LogE(ctx, "[dao.AddParticipant::SQLErr [session_id=%s [user_id=%s [err=%v", sessionID, userID, err)
 		return participant, err
 	}
