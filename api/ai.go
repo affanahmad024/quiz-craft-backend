@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/dao"
@@ -16,6 +17,38 @@ import (
 )
 
 var fileUploadService = services.NewFileUploadService()
+
+func parseQuizMetadataFromForm(c *gin.Context) model.QuizMetadata {
+	metadata := model.QuizMetadata{
+		Title:       strings.TrimSpace(c.PostForm("metadata[title]")),
+		Description: strings.TrimSpace(c.PostForm("metadata[description]")),
+	}
+
+	if tagsValue := strings.TrimSpace(c.PostForm("metadata[tags]")); tagsValue != "" {
+		rawTags := strings.Split(tagsValue, ",")
+		metadata.Tags = make([]string, 0, len(rawTags))
+		for _, tag := range rawTags {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				metadata.Tags = append(metadata.Tags, tag)
+			}
+		}
+	}
+
+	if value := strings.TrimSpace(c.PostForm("metadata[time_limit_minutes]")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			metadata.TimeLimitMinutes = &parsed
+		}
+	}
+
+	if value := strings.TrimSpace(c.PostForm("metadata[passing_score_percentage]")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			metadata.PassingScorePercentage = &parsed
+		}
+	}
+
+	return metadata
+}
 
 // UploadFile handles file upload
 // POST /api/v1/files/upload
@@ -202,6 +235,7 @@ func GenerateQuizFromText(c *gin.Context) {
 		commons.RespBadReq(c, "invalid request body")
 		return
 	}
+	req.Options.Metadata = req.Metadata
 
 	// Create generation job
 	job := &model.GenerationJob{
@@ -284,6 +318,7 @@ func GenerateQuizFromFile(c *gin.Context) {
 		QuestionType: c.PostForm("options[question_type]"),
 		Category:     c.PostForm("options[category]"),
 		Language:     c.PostForm("options[language]"),
+		Metadata:     parseQuizMetadataFromForm(c),
 	}
 
 	// Validate and set defaults for required fields
@@ -500,6 +535,7 @@ func ExtractQuizFromFile(c *gin.Context) {
 			QuestionType: "mixed",
 			Category:     "extracted",
 			Language:     "en",
+			Metadata:     parseQuizMetadataFromForm(c),
 		},
 		CreatedAt: time.Now(),
 	}

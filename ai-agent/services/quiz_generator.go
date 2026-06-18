@@ -16,8 +16,8 @@ import (
 
 // QuizGeneratorService handles quiz generation from AI responses
 type QuizGeneratorService struct {
-	db              *sql.DB
-	imageProcessor  *ImageProcessorService
+	db             *sql.DB
+	imageProcessor *ImageProcessorService
 }
 
 // NewQuizGeneratorService creates a new quiz generator service
@@ -41,17 +41,45 @@ func (s *QuizGeneratorService) CreateQuizFromAIResponse(ctx context.Context, aiR
 	}
 	defer tx.Rollback()
 
+	metadata := options.Metadata
+	title := metadata.Title
+	if title == "" {
+		title = aiResponse.Title
+	}
+
+	description := metadata.Description
+	if description == "" {
+		description = aiResponse.Description
+	}
+
+	category := options.Category
+	if category == "" {
+		category = aiResponse.Category
+	}
+
+	difficulty := options.Difficulty
+	if difficulty == "" {
+		difficulty = aiResponse.Difficulty
+	}
+
+	passingScore := 0
+	if metadata.PassingScorePercentage != nil {
+		passingScore = *metadata.PassingScorePercentage
+	}
+
 	// Create quiz
 	quiz := &quizmodel.Quiz{
-		ID:          uuid.New().String(),
-		Title:       aiResponse.Title,
-		Description: aiResponse.Description,
-		CreatorID:   userID,
-		Category:    aiResponse.Category,
-		Difficulty:  aiResponse.Difficulty,
-		IsPublished: false,
-		IsPublic:    true,
-		Tags:        []string{"ai-generated"},
+		ID:               uuid.New().String(),
+		Title:            title,
+		Description:      description,
+		CreatorID:        userID,
+		Category:         category,
+		Difficulty:       difficulty,
+		TimeLimitMinutes: metadata.TimeLimitMinutes,
+		PassingScore:     passingScore,
+		IsPublished:      false,
+		IsPublic:         true,
+		Tags:             metadata.Tags,
 		Meta: map[string]interface{}{
 			"ai_generated":    true,
 			"generation_date": time.Now().Format(time.RFC3339),
