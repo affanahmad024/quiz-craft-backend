@@ -25,7 +25,7 @@ type LiveSessionDAO struct {
 	MaxParticipants          sql.NullInt64
 	ProgressionMode          string
 	TimerMode                string
-	QuestionTimerSeconds     int
+	QuestionTimerSeconds     sql.NullInt64
 	WholeQuizTimerSeconds    sql.NullInt64
 	CurrentQuestionIndex     int
 	CurrentQuestionStartedAt sql.NullTime
@@ -52,7 +52,7 @@ type LiveSessionAPI struct {
 	MaxParticipants          *int                   `json:"max_participants,omitempty"`
 	ProgressionMode          string                 `json:"progression_mode"`
 	TimerMode                string                 `json:"timer_mode"`
-	QuestionTimerSeconds     int                    `json:"question_timer_seconds,omitempty"`
+	QuestionTimerSeconds     *int                   `json:"question_timer_seconds,omitempty"`
 	WholeQuizTimerSeconds    *int                   `json:"whole_quiz_timer_seconds,omitempty"`
 	CurrentQuestionIndex     int                    `json:"current_question_index"`
 	CurrentQuestionStartedAt *string                `json:"current_question_started_at,omitempty"`
@@ -75,7 +75,6 @@ func (s *LiveSessionDAO) ToAPI() LiveSessionAPI {
 		IsDiscoverable:       s.IsDiscoverable,
 		ProgressionMode:      s.ProgressionMode,
 		TimerMode:            s.TimerMode,
-		QuestionTimerSeconds: s.QuestionTimerSeconds,
 		CurrentQuestionIndex: s.CurrentQuestionIndex,
 		CreatedAt:            s.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:            s.UpdatedAt.Format(time.RFC3339),
@@ -109,6 +108,11 @@ func (s *LiveSessionDAO) ToAPI() LiveSessionAPI {
 		api.MaxParticipants = &maxParticipants
 	}
 
+	if s.QuestionTimerSeconds.Valid {
+		questionTimerSeconds := int(s.QuestionTimerSeconds.Int64)
+		api.QuestionTimerSeconds = &questionTimerSeconds
+	}
+
 	if s.CurrentQuestionStartedAt.Valid {
 		currentQuestionStartedAt := s.CurrentQuestionStartedAt.Time.Format(time.RFC3339)
 		api.CurrentQuestionStartedAt = &currentQuestionStartedAt
@@ -134,10 +138,10 @@ func (s *LiveSessionDAO) ToAPI() LiveSessionAPI {
 
 // CreateLiveSessionRequest represents a request to create a live session
 type CreateLiveSessionRequest struct {
-	QuizID               uuid.UUID              `json:"quiz_id" binding:"required"`
-	Title                string                 `json:"title" binding:"required"`
-	Description          string                 `json:"description,omitempty"`
-	SessionType          string                 `json:"session_type" binding:"required"`
+	QuizID                uuid.UUID              `json:"quiz_id" binding:"required"`
+	Title                 string                 `json:"title" binding:"required"`
+	Description           string                 `json:"description,omitempty"`
+	SessionType           string                 `json:"session_type" binding:"required"`
 	ScheduledAt           *string                `json:"scheduled_at,omitempty"`
 	ProgressionMode       string                 `json:"progression_mode" binding:"required"`
 	TimerMode             string                 `json:"timer_mode" binding:"required"`

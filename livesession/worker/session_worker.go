@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/dao"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/model"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/websocket"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 	quizmodel "github.com/affanahmad024/quiz-craft/backend/quiz/model"
+	"github.com/google/uuid"
 )
 
 const (
@@ -152,9 +152,12 @@ func (w *SessionWorker) ProcessPerQuestionTimer(ctx context.Context, session mod
 	if !session.CurrentQuestionStartedAt.Valid {
 		return
 	}
+	if !session.QuestionTimerSeconds.Valid {
+		return
+	}
 
 	timeElapsed := time.Since(session.CurrentQuestionStartedAt.Time)
-	timerDuration := time.Duration(session.QuestionTimerSeconds) * time.Second
+	timerDuration := time.Duration(session.QuestionTimerSeconds.Int64) * time.Second
 
 	// Send timer updates every second
 	remainingSeconds := int(timerDuration.Seconds() - timeElapsed.Seconds())

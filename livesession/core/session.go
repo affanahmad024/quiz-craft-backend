@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/dao"
 	"github.com/affanahmad024/quiz-craft/backend/livesession/model"
 	notificationcore "github.com/affanahmad024/quiz-craft/backend/notification/core"
 	notificationmodel "github.com/affanahmad024/quiz-craft/backend/notification/model"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
+	"github.com/google/uuid"
 )
 
 const (
@@ -342,7 +342,11 @@ func SubmitAnswer(ctx context.Context, sessionID, userID uuid.UUID, req model.Su
 	// Calculate points with speed bonus
 	pointsEarned := 0
 	if isCorrect {
-		pointsEarned = CalculatePoints(req.TimeTakenMs, sessionDAO.QuestionTimerSeconds*1000)
+		maxTimeMs := 0
+		if sessionDAO.QuestionTimerSeconds.Valid {
+			maxTimeMs = int(sessionDAO.QuestionTimerSeconds.Int64) * 1000
+		}
+		pointsEarned = CalculatePoints(req.TimeTakenMs, maxTimeMs)
 	}
 
 	// Save answer
@@ -444,6 +448,10 @@ func InviteUsers(ctx context.Context, sessionID, inviterID uuid.UUID, userIDs []
 
 // CalculatePoints calculates points based on answer speed
 func CalculatePoints(timeTakenMs, maxTimeMs int) int {
+	if maxTimeMs <= 0 {
+		return BasePoints
+	}
+
 	if timeTakenMs > maxTimeMs {
 		timeTakenMs = maxTimeMs
 	}
