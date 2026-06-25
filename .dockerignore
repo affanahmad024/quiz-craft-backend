@@ -1,0 +1,33 @@
+# Local environment files
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Build outputs and binaries
+bin/
+dist/
+build/
+*.exe
+*.test
+*.out
+quiz-craft-server
+quiz-craft.exe
+backend.exe
+
+# Local/runtime data
+uploads/
+temp/
+tmp/
+logs/
+*.log
+
+# VCS and editor files
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

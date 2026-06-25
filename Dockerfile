@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata wget
 
 # Create non-root user
 RUN addgroup -g 1000 appuser && \
@@ -44,13 +44,13 @@ WORKDIR /app
 COPY --from=builder /app/quizcraft-api .
 
 # Copy migrations (if using embedded migrations)
-COPY --from=builder /app/pkg/database/migrations ./migrations
+COPY --from=builder /app/pkg/database/migrations ./pkg/database/migrations
 
 # Copy config template (optional)
 COPY --from=builder /app/.env.example ./.env.example
 
 # Change ownership to non-root user
-RUN chown -R appuser:appuser /app
+RUN mkdir -p uploads uploads/questions && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
@@ -60,11 +60,12 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider "http://localhost:${PORT:-8080}/api/v1/health" || exit 1
 
 # Set environment variables
 ENV GIN_MODE=release \
-    APP_ENV=production
+    APP_ENV=production \
+    SERVER_HOST=0.0.0.0
 
 # Run the application
 CMD ["./quizcraft-api"]
