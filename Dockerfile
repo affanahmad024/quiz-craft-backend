@@ -2,7 +2,7 @@
 # Optimized for production deployment
 
 # Stage 1: Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24.1-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make gcc musl-dev
