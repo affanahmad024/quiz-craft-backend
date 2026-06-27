@@ -47,7 +47,6 @@ var (
 )
 
 func main() {
-	
 	// Load configuration
 	var err error
 	cfg, err = config.Load()
