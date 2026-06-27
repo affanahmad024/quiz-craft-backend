@@ -179,13 +179,34 @@ func SubmitAnswer(ctx context.Context, attemptID string, userID string, input mo
 		return nil, commons.BadInput("question-not-in-quiz")
 	}
 
-	// Phase 5: Only support MC and TF questions
+	if question.QuestionType == "short_answer" {
+		if input.AnswerText == nil || *input.AnswerText == "" {
+			return nil, commons.BadInput("answer-text-required-for-short-answer")
+		}
+		userAnswer := &model.UserAnswer{
+			ID:           uuid.New().String(),
+			AttemptID:    attemptID,
+			QuestionID:   input.QuestionID,
+			AnswerText:   input.AnswerText,
+			IsCorrect:    nil,
+			PointsEarned: 0,
+			AnsweredAt:   time.Now(),
+			Meta: model.JSONMap{
+				"review_status": "pending_review",
+			},
+		}
+		if err := quizdao.CreateOrUpdateUserAnswer(ctx, userAnswer); err != nil {
+			commons.LogE(ctx, "[core.SubmitAnswer::SaveShortAnswerErr [err=%v", err)
+			return nil, err
+		}
+		return userAnswer, nil
+	}
+
 	if question.QuestionType != "multiple_choice" && question.QuestionType != "true_false" {
 		commons.LogW(ctx, "[core.SubmitAnswer::UnsupportedQuestionType [type=%s", question.QuestionType)
 		return nil, commons.BadInput("question-type-not-supported")
 	}
 
-	// Validate answer_id is provided for MC/TF
 	if input.AnswerID == nil {
 		return nil, commons.BadInput("answer-id-required-for-mc-tf")
 	}
@@ -362,6 +383,17 @@ func GetAttemptResult(ctx context.Context, attemptID string, userID string) (*mo
 	if err != nil {
 		commons.LogE(ctx, "[core.GetAttemptResult::GetResultErr [attempt_id=%s [err=%v", attemptID, err)
 		return nil, err
+	}
+
+	breakdown, err := quizdao.GetAttemptDifficultyBreakdown(ctx, attemptUUID)
+	if err != nil {
+		commons.LogW(ctx, "[core.GetAttemptResult::DifficultyBreakdownErr [attempt_id=%s [err=%v", attemptID, err)
+	} else {
+		result.DifficultyBreakdown = breakdown
+		result.TotalQuestions = 0
+		for _, stat := range breakdown {
+			result.TotalQuestions += stat.Total
+		}
 	}
 
 	commons.Log(ctx, "[core.GetAttemptResult::OK [attempt_id=%s", attemptID)

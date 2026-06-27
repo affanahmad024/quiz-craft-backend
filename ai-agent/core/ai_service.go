@@ -11,6 +11,7 @@ import (
 
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
+	quizmodel "github.com/affanahmad024/quiz-craft/backend/quiz/model"
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
 )
@@ -231,7 +232,8 @@ REQUIREMENTS:
 - Difficulty: %s
 - Question type: %s
 - Category: %s
-- For multiple choice: provide 4 options
+- Follow the selected question type exactly using these rules:
+%s
 - Mark the correct answer with "is_correct": true
 - Include brief explanations for correct answers
 - Vary question difficulty across the quiz
@@ -263,7 +265,8 @@ RESPONSE FORMAT (strict JSON, no markdown code blocks):
 IMPORTANT:
 - Return ONLY valid JSON, no markdown code blocks or additional text
 - Ensure exactly %d questions are generated
-- Each multiple choice question must have exactly 4 answers
+- For multiple_choice questions, provide exactly 4 answers
+- For true_false questions, provide exactly 2 answers: True and False
 - Exactly ONE answer must be marked as correct per question`,
 		options.NumQuestions,
 		options.Difficulty,
@@ -272,6 +275,7 @@ IMPORTANT:
 		options.NumQuestions,
 		options.Difficulty,
 		options.QuestionType,
+		questionTypeInstructions(options.QuestionType),
 		options.Category,
 		options.Category,
 		options.Difficulty,
@@ -293,7 +297,8 @@ REQUIREMENTS:
 - Difficulty: %s
 - Question type: %s
 - Category: %s
-- For multiple choice: provide 4 options
+- Follow the selected question type exactly using these rules:
+%s
 - Mark the correct answer with "is_correct": true
 - Include brief explanations for correct answers
 - Vary question difficulty across the quiz
@@ -324,7 +329,8 @@ RESPONSE FORMAT (strict JSON, no markdown code blocks):
 IMPORTANT:
 - Return ONLY valid JSON, no markdown code blocks or additional text
 - Ensure exactly %d questions are generated
-- Each multiple choice question must have exactly 4 answers
+- For multiple_choice questions, provide exactly 4 answers
+- For true_false questions, provide exactly 2 answers: True and False
 - Exactly ONE answer must be marked as correct per question`,
 		options.NumQuestions,
 		options.Difficulty,
@@ -332,6 +338,7 @@ IMPORTANT:
 		options.NumQuestions,
 		options.Difficulty,
 		options.QuestionType,
+		questionTypeInstructions(options.QuestionType),
 		options.Category,
 		options.Category,
 		options.Difficulty,
@@ -339,6 +346,24 @@ IMPORTANT:
 	)
 
 	return prompt
+}
+
+func questionTypeInstructions(questionType string) string {
+	switch questionType {
+	case "true_false":
+		return `  - Generate only true_false questions
+  - Each question must have exactly 2 answers: True and False
+  - Set "question_type" to "true_false" for every question`
+	case "mixed":
+		return `  - Generate a balanced mix of multiple_choice and true_false questions
+  - Multiple choice questions must have exactly 4 answers
+  - True/false questions must have exactly 2 answers: True and False
+  - Set "question_type" accurately for each question`
+	default:
+		return `  - Generate only multiple_choice questions
+  - Each question must have exactly 4 answer options
+  - Set "question_type" to "multiple_choice" for every question`
+	}
 }
 
 // parseAIResponse parses the JSON response from AI
@@ -586,4 +611,71 @@ IMPORTANT:
 - If question has associated image, include it in image_data as base64`, imageInstructions)
 
 	return prompt
+}
+
+// EnrichQuizMetadata generates missing quiz and question metadata for publish-time enrichment.
+func (s *AIService) EnrichQuizMetadata(ctx context.Context, quiz *quizmodel.Quiz, questions []*quizmodel.Question) (*model.AIEnrichmentResponse, error) {
+	commons.Log(ctx, "[core.EnrichQuizMetadata [quiz_id=%s [questions=%d", quiz.ID, len(questions))
+
+	prompt := s.buildEnrichmentPrompt(quiz, questions)
+	response, err := s.callGeminiAPI(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	var enrichment model.AIEnrichmentResponse
+	if err := json.Unmarshal([]byte(response), &enrichment); err != nil {
+		commons.LogE(ctx, "[core.EnrichQuizMetadata::JSONErr [err=%v [response_preview=%s", err, response[:min(len(response), 500)])
+		return nil, commons.BadInput("ai-enrichment-response-malformed")
+	}
+
+	return &enrichment, nil
+}
+
+func (s *AIService) buildEnrichmentPrompt(quiz *quizmodel.Quiz, questions []*quizmodel.Question) string {
+	payload := map[string]interface{}{
+		"quiz": map[string]interface{}{
+			"id":          quiz.ID,
+			"title":       quiz.Title,
+			"description": quiz.Description,
+			"difficulty":  quiz.Difficulty,
+			"category":    quiz.Category,
+			"tags":        []string(quiz.Tags),
+		},
+		"questions": questions,
+	}
+	payloadJSON, _ := json.Marshal(payload)
+
+	return fmt.Sprintf(`You are enriching an existing quiz before publishing.
+
+Return ONLY strict JSON. Fill only missing fields. If a value is already present in the input, repeat an empty value for that field rather than changing it.
+
+Allowed difficulty values: easy, medium, hard.
+Generate concise, useful search tags. Generate a general explanation for every question that is missing one.
+
+INPUT JSON:
+%s
+
+RESPONSE FORMAT:
+{
+  "quiz": {
+    "difficulty": "easy|medium|hard or empty if already present",
+    "description": "description only if missing",
+    "tags": ["subject", "topic", "chapter", "concept", "exam tag"]
+  },
+  "questions": [
+    {
+      "id": "question id from input",
+      "difficulty": "easy|medium|hard or empty if already present",
+      "explanation": "explanation only if missing",
+      "tags": ["concept", "topic"]
+    }
+  ]
+}`, string(payloadJSON))
 }

@@ -3,20 +3,24 @@ package model
 import (
 	"errors"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // Question represents a question in a quiz
 type Question struct {
-	ID           string    `json:"id"`
-	QuizID       string    `json:"quiz_id"`
-	QuestionText string    `json:"question_text"`
-	QuestionType string    `json:"question_type"` // multiple_choice, true_false, short_answer
-	Points       int       `json:"points"`
-	OrderIndex   int       `json:"order_index"`
-	Explanation  string    `json:"explanation,omitempty"`
-	Meta         JSONMap   `json:"meta,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           string         `json:"id"`
+	QuizID       string         `json:"quiz_id"`
+	QuestionText string         `json:"question_text"`
+	QuestionType string         `json:"question_type"` // multiple_choice, true_false, short_answer
+	Difficulty   string         `json:"difficulty,omitempty"`
+	Tags         pq.StringArray `json:"tags,omitempty"`
+	Points       int            `json:"points"`
+	OrderIndex   int            `json:"order_index"`
+	Explanation  string         `json:"explanation,omitempty"`
+	Meta         JSONMap        `json:"meta,omitempty"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 
 	// Answers can be either []Answer (with is_correct) or []AnswerListItem (without is_correct)
 	// This field is populated dynamically and not stored in DB
@@ -40,6 +44,9 @@ func (q *Question) Validate() error {
 	if q.QuestionType != "multiple_choice" && q.QuestionType != "true_false" && q.QuestionType != "short_answer" {
 		return errors.New("question type must be 'multiple_choice', 'true_false', or 'short_answer'")
 	}
+	if q.Difficulty != "" && q.Difficulty != "easy" && q.Difficulty != "medium" && q.Difficulty != "hard" {
+		return errors.New("difficulty must be 'easy', 'medium', or 'hard'")
+	}
 	if q.Points < 1 || q.Points > 100 {
 		return errors.New("points must be between 1 and 100")
 	}
@@ -61,11 +68,11 @@ func (q *Question) RequiresAnswers() bool {
 func (q *Question) MinimumAnswers() int {
 	switch q.QuestionType {
 	case "multiple_choice":
-		return 2 // At least 2 options
+		return 2
 	case "true_false":
-		return 2 // True and False
+		return 2
 	case "short_answer":
-		return 0 // No predefined answers
+		return 0
 	default:
 		return 0
 	}
@@ -82,7 +89,6 @@ func (q *Question) ValidateWithAnswers(answers []Answer) error {
 		return errors.New("insufficient number of answers for this question type")
 	}
 
-	// For questions with predefined answers, check answer validity
 	if q.RequiresAnswers() {
 		for _, answer := range answers {
 			if err := answer.Validate(); err != nil {
@@ -103,12 +109,14 @@ type QuestionReorder struct {
 // QuestionInput represents input for creating a question
 type QuestionInput struct {
 	QuestionText string        `json:"question_text"`
-	QuestionType string        `json:"question_type"` // multiple_choice, true_false, short_answer
+	QuestionType string        `json:"question_type"`
+	Difficulty   string        `json:"difficulty,omitempty"`
+	Tags         []string      `json:"tags,omitempty"`
 	Points       int           `json:"points"`
 	Explanation  string        `json:"explanation,omitempty"`
 	Meta         JSONMap       `json:"meta,omitempty"`
-	ImageFileID  *string       `json:"image_file_id,omitempty"` // Optional image file ID
-	Answers      []AnswerInput `json:"answers,omitempty"`       // Optional answers to create with question
+	ImageFileID  *string       `json:"image_file_id,omitempty"`
+	Answers      []AnswerInput `json:"answers,omitempty"`
 }
 
 // BulkQuestionsInput represents input for creating multiple questions at once
@@ -118,10 +126,12 @@ type BulkQuestionsInput struct {
 
 // QuestionUpdateInput represents input for updating a question
 type QuestionUpdateInput struct {
-	QuestionText string  `json:"question_text,omitempty"`
-	QuestionType string  `json:"question_type,omitempty"`
-	Points       *int    `json:"points,omitempty"`
-	Explanation  *string `json:"explanation,omitempty"`
-	Meta         JSONMap `json:"meta,omitempty"`
-	ImageFileID  *string `json:"image_file_id,omitempty"` // Optional image file ID (nil=no change, empty=remove, value=update)
+	QuestionText string   `json:"question_text,omitempty"`
+	QuestionType string   `json:"question_type,omitempty"`
+	Difficulty   *string  `json:"difficulty,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	Points       *int     `json:"points,omitempty"`
+	Explanation  *string  `json:"explanation,omitempty"`
+	Meta         JSONMap  `json:"meta,omitempty"`
+	ImageFileID  *string  `json:"image_file_id,omitempty"`
 }

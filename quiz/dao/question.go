@@ -8,6 +8,7 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/model"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // CreateQuestion creates a new question
@@ -16,10 +17,10 @@ func CreateQuestion(ctx context.Context, question *model.Question) error {
 
 	metaJSON, _ := json.Marshal(question.Meta)
 	qry := `INSERT INTO questions (
-				id, quiz_id, question_text, question_type, points, order_index,
+				id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
 				explanation, meta, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
 			) RETURNING created_at, updated_at`
 
 	err := db.QueryRowContext(ctx, qry,
@@ -27,6 +28,8 @@ func CreateQuestion(ctx context.Context, question *model.Question) error {
 		question.QuizID,
 		question.QuestionText,
 		question.QuestionType,
+		question.Difficulty,
+		pq.Array(question.Tags),
 		question.Points,
 		question.OrderIndex,
 		question.Explanation,
@@ -47,11 +50,12 @@ func FindQuestionByID(ctx context.Context, id uuid.UUID) (*model.Question, error
 	commons.Log(ctx, "[dao.FindQuestionByID [id=%s", id)
 
 	question := &model.Question{}
-	qry := `SELECT id, quiz_id, question_text, question_type, points, order_index,
+	qry := `SELECT id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
 			explanation, meta, created_at, updated_at
 			FROM questions
 			WHERE id = $1`
 
+	var difficultySQL sql.NullString
 	var explanationSQL sql.NullString
 	var metaJSON []byte
 
@@ -60,6 +64,8 @@ func FindQuestionByID(ctx context.Context, id uuid.UUID) (*model.Question, error
 		&question.QuizID,
 		&question.QuestionText,
 		&question.QuestionType,
+		&difficultySQL,
+		&question.Tags,
 		&question.Points,
 		&question.OrderIndex,
 		&explanationSQL,
@@ -76,12 +82,12 @@ func FindQuestionByID(ctx context.Context, id uuid.UUID) (*model.Question, error
 		return nil, err
 	}
 
-	// Handle nullable fields
+	if difficultySQL.Valid {
+		question.Difficulty = difficultySQL.String
+	}
 	if explanationSQL.Valid {
 		question.Explanation = explanationSQL.String
 	}
-
-	// Parse meta JSON
 	if len(metaJSON) > 0 {
 		json.Unmarshal(metaJSON, &question.Meta)
 	}
@@ -94,7 +100,7 @@ func ListByQuizID(ctx context.Context, quizID uuid.UUID) ([]*model.Question, err
 	commons.Log(ctx, "[dao.ListByQuizID [quiz_id=%s", quizID)
 
 	questions := []*model.Question{}
-	qry := `SELECT id, quiz_id, question_text, question_type, points, order_index,
+	qry := `SELECT id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
 			explanation, meta, created_at, updated_at
 			FROM questions
 			WHERE quiz_id = $1
@@ -109,6 +115,7 @@ func ListByQuizID(ctx context.Context, quizID uuid.UUID) ([]*model.Question, err
 
 	for rows.Next() {
 		question := &model.Question{}
+		var difficultySQL sql.NullString
 		var explanationSQL sql.NullString
 		var metaJSON []byte
 
@@ -117,6 +124,8 @@ func ListByQuizID(ctx context.Context, quizID uuid.UUID) ([]*model.Question, err
 			&question.QuizID,
 			&question.QuestionText,
 			&question.QuestionType,
+			&difficultySQL,
+			&question.Tags,
 			&question.Points,
 			&question.OrderIndex,
 			&explanationSQL,
@@ -129,12 +138,12 @@ func ListByQuizID(ctx context.Context, quizID uuid.UUID) ([]*model.Question, err
 			continue
 		}
 
-		// Handle nullable fields
+		if difficultySQL.Valid {
+			question.Difficulty = difficultySQL.String
+		}
 		if explanationSQL.Valid {
 			question.Explanation = explanationSQL.String
 		}
-
-		// Parse meta JSON
 		if len(metaJSON) > 0 {
 			json.Unmarshal(metaJSON, &question.Meta)
 		}
@@ -152,13 +161,15 @@ func UpdateQuestion(ctx context.Context, question *model.Question) error {
 
 	metaJSON, _ := json.Marshal(question.Meta)
 	qry := `UPDATE questions
-			SET question_text = $1, question_type = $2, points = $3, order_index = $4,
-				explanation = $5, meta = $6, updated_at = NOW()
-			WHERE id = $7`
+			SET question_text = $1, question_type = $2, difficulty = $3, tags = $4,
+				points = $5, order_index = $6, explanation = $7, meta = $8, updated_at = NOW()
+			WHERE id = $9`
 
 	result, err := db.ExecContext(ctx, qry,
 		question.QuestionText,
 		question.QuestionType,
+		question.Difficulty,
+		pq.Array(question.Tags),
 		question.Points,
 		question.OrderIndex,
 		question.Explanation,
@@ -230,7 +241,6 @@ func CountByQuizID(ctx context.Context, quizID uuid.UUID) (int, error) {
 func ReorderQuestions(ctx context.Context, updates []model.QuestionReorder) error {
 	commons.Log(ctx, "[dao.ReorderQuestions [count=%d", len(updates))
 
-	// Start transaction
 	tx, err := db.Begin()
 	if err != nil {
 		commons.LogE(ctx, "[dao.ReorderQuestions::TxErr [err=%v", err)
@@ -265,7 +275,6 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 		return nil
 	}
 
-	// Start transaction
 	tx, err := db.Begin()
 	if err != nil {
 		commons.LogE(ctx, "[dao.CreateQuestionsBulk::TxErr [err=%v", err)
@@ -274,10 +283,10 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 	defer tx.Rollback()
 
 	qry := `INSERT INTO questions (
-				id, quiz_id, question_text, question_type, points, order_index,
+				id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
 				explanation, meta, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
 			) RETURNING created_at, updated_at`
 
 	for _, question := range questions {
@@ -287,6 +296,8 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 			question.QuizID,
 			question.QuestionText,
 			question.QuestionType,
+			question.Difficulty,
+			pq.Array(question.Tags),
 			question.Points,
 			question.OrderIndex,
 			question.Explanation,
@@ -306,4 +317,16 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 
 	commons.Log(ctx, "[dao.CreateQuestionsBulk::OK [count=%d", len(questions))
 	return nil
+}
+
+// ApplyQuestionEnrichment fills only missing question-level fields.
+func ApplyQuestionEnrichment(ctx context.Context, id uuid.UUID, difficulty, explanation string, tags []string) error {
+	qry := `UPDATE questions
+			SET difficulty = CASE WHEN COALESCE(difficulty, '') = '' THEN NULLIF($1, '') ELSE difficulty END,
+				explanation = CASE WHEN COALESCE(explanation, '') = '' THEN NULLIF($2, '') ELSE explanation END,
+				tags = CASE WHEN tags IS NULL OR cardinality(tags) = 0 THEN $3 ELSE tags END,
+				updated_at = NOW()
+			WHERE id = $4`
+	_, err := db.ExecContext(ctx, qry, difficulty, explanation, pq.Array(tags), id)
+	return err
 }

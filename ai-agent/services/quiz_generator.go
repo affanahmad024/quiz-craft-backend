@@ -103,6 +103,8 @@ func (s *QuizGeneratorService) CreateQuizFromAIResponse(ctx context.Context, aiR
 			QuizID:       quiz.ID,
 			QuestionText: aiQuestion.QuestionText,
 			QuestionType: aiQuestion.QuestionType,
+			Difficulty:   normalizeAIDifficulty(aiQuestion.Difficulty, options.Difficulty),
+			Tags:         aiQuestion.Tags,
 			Points:       aiQuestion.Points,
 			OrderIndex:   i,
 			Explanation:  aiQuestion.Explanation,
@@ -215,6 +217,8 @@ func (s *QuizGeneratorService) AddQuestionsToExistingQuiz(ctx context.Context, q
 			QuizID:       quizID,
 			QuestionText: aiQuestion.QuestionText,
 			QuestionType: aiQuestion.QuestionType,
+			Difficulty:   normalizeAIDifficulty(aiQuestion.Difficulty, "medium"),
+			Tags:         aiQuestion.Tags,
 			Points:       aiQuestion.Points,
 			OrderIndex:   maxOrderIndex + i + 1,
 			Explanation:  aiQuestion.Explanation,
@@ -394,4 +398,16 @@ func (s *QuizGeneratorService) ParseAIResponse(responseText string) (*model.AIQu
 	}
 
 	return &aiResponse, nil
+}
+
+func normalizeAIDifficulty(value string, fallback string) string {
+	switch value {
+	case "easy", "medium", "hard":
+		return value
+	}
+	switch fallback {
+	case "easy", "medium", "hard":
+		return fallback
+	}
+	return "medium"
 }

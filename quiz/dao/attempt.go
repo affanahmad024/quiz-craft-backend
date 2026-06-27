@@ -514,8 +514,8 @@ func GetAttemptResult(ctx context.Context, attemptID uuid.UUID) (*model.AttemptR
 	answersQry := `SELECT
 		ua.id, ua.attempt_id, ua.question_id, ua.answer_id, ua.answer_text,
 		ua.is_correct, ua.points_earned, ua.answered_at, ua.meta, ua.created_at, ua.updated_at,
-		q.question_text, q.question_type, q.points, q.meta, q.explanation,
-		sa.answer_text as selected_answer_text,
+		q.question_text, q.question_type, q.difficulty, q.points, q.meta, q.explanation,
+		COALESCE(sa.answer_text, ua.answer_text) as selected_answer_text,
 		ca.answer_text as correct_answer_text
 		FROM user_answers ua
 		JOIN questions q ON ua.question_id = q.id
@@ -791,4 +791,53 @@ func GetLatestAttemptsByQuizIDs(ctx context.Context, userID uuid.UUID, quizIDs [
 
 	commons.Log(ctx, "[dao.GetLatestAttemptsByQuizIDs::OK [found=%d", len(result))
 	return result, nil
+}
+
+// GetAttemptDifficultyBreakdown summarizes attempt results by question difficulty.
+func GetAttemptDifficultyBreakdown(ctx context.Context, attemptID uuid.UUID) ([]model.DifficultyAttemptStat, error) {
+	commons.Log(ctx, "[dao.GetAttemptDifficultyBreakdown [attempt_id=%s", attemptID)
+
+	qry := `SELECT
+			COALESCE(q.difficulty, 'medium') as difficulty,
+			COUNT(*) as total,
+			COUNT(*) FILTER (WHERE ua.is_correct = true) as correct,
+			COUNT(*) FILTER (WHERE ua.is_correct = false) as wrong,
+			COUNT(*) FILTER (WHERE ua.id IS NULL) as unanswered,
+			COUNT(*) FILTER (WHERE ua.id IS NOT NULL AND ua.is_correct IS NULL) as pending_review
+		FROM quiz_attempts a
+		JOIN questions q ON q.quiz_id = a.quiz_id
+		LEFT JOIN user_answers ua ON ua.attempt_id = a.id AND ua.question_id = q.id
+		WHERE a.id = $1
+		GROUP BY COALESCE(q.difficulty, 'medium')
+		ORDER BY CASE COALESCE(q.difficulty, 'medium')
+			WHEN 'easy' THEN 1
+			WHEN 'medium' THEN 2
+			WHEN 'hard' THEN 3
+			ELSE 4
+		END`
+
+	rows, err := db.QueryContext(ctx, qry, attemptID)
+	if err != nil {
+		commons.LogE(ctx, "[dao.GetAttemptDifficultyBreakdown::QueryErr [err=%v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := make([]model.DifficultyAttemptStat, 0)
+	seen := map[string]bool{}
+	for rows.Next() {
+		var stat model.DifficultyAttemptStat
+		if err := rows.Scan(&stat.Difficulty, &stat.Total, &stat.Correct, &stat.Wrong, &stat.Unanswered, &stat.PendingReview); err != nil {
+			return nil, err
+		}
+		seen[stat.Difficulty] = true
+		stats = append(stats, stat)
+	}
+
+	for _, difficulty := range []string{"easy", "medium", "hard"} {
+		if !seen[difficulty] {
+			stats = append(stats, model.DifficultyAttemptStat{Difficulty: difficulty})
+		}
+	}
+	return stats, nil
 }

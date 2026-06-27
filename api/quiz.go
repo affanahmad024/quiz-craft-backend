@@ -12,7 +12,6 @@ import (
 	aiagentmodel "github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
 	"github.com/affanahmad024/quiz-craft/backend/ai-agent/services"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
-	educatorcore "github.com/affanahmad024/quiz-craft/backend/educator/core"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/core"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/model"
@@ -350,19 +349,17 @@ func PublishQuiz(c *gin.Context) {
 		return
 	}
 
-	// Notify followers if user is an educator (async, don't block response)
-	go func() {
-		// Get quiz details for notification
-		quiz, qErr := core.GetQuiz(ctx, quizID, userID.String())
-		if qErr == nil {
-			// Notify followers about new quiz
-			educatorcore.NotifyFollowersNewQuiz(ctx, userID, quizID, quiz.Title, notificationServiceInstance)
-		}
-	}()
+	quizUUID, _ := uuid.Parse(quizID)
+	quiz, findErr := quizdao.FindByID(ctx, quizUUID)
+	if findErr != nil {
+		commons.LogW(ctx, "[api.PublishQuiz::FindAfterPublishErr [quiz_id=%s [err=%v", quizID, findErr)
+		commons.RespOKWithMsg(c, "Quiz publishing started. You will be notified after AI enrichment.", gin.H{"status": "enrichment_pending"})
+		return
+	}
 
 	commons.Log(ctx, "[api.PublishQuiz::OK [time_taken=%v [ip=%s [quiz_id=%s",
 		time.Since(st), ip, quizID)
-	commons.RespOKWithMsg(c, "Quiz published successfully", nil)
+	commons.RespOKWithMsg(c, "Quiz publishing started. You will be notified after AI enrichment.", quiz)
 }
 
 // UnpublishQuiz unpublishes a quiz
@@ -399,9 +396,17 @@ func UnpublishQuiz(c *gin.Context) {
 		return
 	}
 
+	quizUUID, _ := uuid.Parse(quizID)
+	quiz, findErr := quizdao.FindByID(ctx, quizUUID)
+	if findErr != nil {
+		commons.LogW(ctx, "[api.UnpublishQuiz::FindAfterUnpublishErr [quiz_id=%s [err=%v", quizID, findErr)
+		commons.RespOKWithMsg(c, "Quiz unpublished successfully", gin.H{"status": "unpublished"})
+		return
+	}
+
 	commons.Log(ctx, "[api.UnpublishQuiz::OK [time_taken=%v [ip=%s [quiz_id=%s",
 		time.Since(st), ip, quizID)
-	commons.RespOKWithMsg(c, "Quiz unpublished successfully", nil)
+	commons.RespOKWithMsg(c, "Quiz unpublished successfully", quiz)
 }
 
 // DeleteQuiz soft deletes a quiz
@@ -1311,7 +1316,7 @@ func AddQuestionsFromFile(c *gin.Context) {
 	// Validate file type
 	contentType := fileHeader.Header.Get("Content-Type")
 	validTypes := map[string]bool{
-		"application/pdf":                                           true,
+		"application/pdf": true,
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
 		"text/plain": true,
 		"image/jpeg": true,

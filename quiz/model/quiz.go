@@ -11,34 +11,36 @@ import (
 
 // Quiz represents a quiz in the system
 type Quiz struct {
-	ID               string         `json:"id"`
-	Title            string         `json:"title"`
-	Description      string         `json:"description,omitempty"`
-	CreatorID        string         `json:"creator_id"`
-	Category         string         `json:"category,omitempty"`
-	Difficulty       string         `json:"difficulty,omitempty"` // easy, medium, hard
-	TimeLimitMinutes *int           `json:"time_limit_minutes,omitempty"`
-	PassingScore     int            `json:"passing_score"`
-	IsPublished      bool           `json:"is_published"`
-	IsPublic         bool           `json:"is_public"`
-	ThumbnailURL     string         `json:"thumbnail_url,omitempty"`
-	Tags             pq.StringArray `json:"tags,omitempty"`
+	ID                string         `json:"id"`
+	Title             string         `json:"title"`
+	Description       string         `json:"description,omitempty"`
+	CreatorID         string         `json:"creator_id"`
+	Category          string         `json:"category,omitempty"`
+	Difficulty        string         `json:"difficulty,omitempty"` // easy, medium, hard
+	TimeLimitMinutes  *int           `json:"time_limit_minutes,omitempty"`
+	PassingScore      int            `json:"passing_score"`
+	IsPublished       bool           `json:"is_published"`
+	PublishStatus     string         `json:"publish_status,omitempty"`
+	IsPublic          bool           `json:"is_public"`
+	ThumbnailURL      string         `json:"thumbnail_url,omitempty"`
+	Tags              pq.StringArray `json:"tags,omitempty"`
+	AIEnrichmentJobID *string        `json:"ai_enrichment_job_id,omitempty"`
 
 	// Phase 6: Advanced Features
-	ShareCode          *string    `json:"share_code,omitempty"`
-	ShareCount         int        `json:"share_count"`
-	ViewCount          int        `json:"view_count"`
-	IsTemplate         bool       `json:"is_template"`
-	TemplateUsageCount int        `json:"template_usage_count"`
-	BasedOnTemplateID  *string    `json:"based_on_template_id,omitempty"`
+	ShareCode          *string `json:"share_code,omitempty"`
+	ShareCount         int     `json:"share_count"`
+	ViewCount          int     `json:"view_count"`
+	IsTemplate         bool    `json:"is_template"`
+	TemplateUsageCount int     `json:"template_usage_count"`
+	BasedOnTemplateID  *string `json:"based_on_template_id,omitempty"`
 
-	Meta             JSONMap              `json:"meta,omitempty"`
-	CreatedAt        time.Time            `json:"created_at"`
-	UpdatedAt        time.Time            `json:"updated_at"`
-	DeletedAt        *time.Time           `json:"deleted_at,omitempty"`
+	Meta      JSONMap    `json:"meta,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 
 	// Latest attempt information (populated only when listing quizzes for a specific user)
-	LatestAttempt    *LatestAttemptInfo   `json:"latest_attempt,omitempty"`
+	LatestAttempt *LatestAttemptInfo `json:"latest_attempt,omitempty"`
 }
 
 // LatestAttemptInfo contains summary of the latest quiz attempt
@@ -87,18 +89,19 @@ func (j *JSONMap) Scan(value interface{}) error {
 
 // QuizListItem represents a simplified quiz for list views
 type QuizListItem struct {
-	ID           string    `json:"id"`
-	Title        string    `json:"title"`
-	Description  string    `json:"description,omitempty"`
-	CreatorID    string    `json:"creator_id"`
-	Category     string    `json:"category,omitempty"`
-	Difficulty   string    `json:"difficulty,omitempty"`
-	IsPublished  bool      `json:"is_published"`
-	IsPublic     bool      `json:"is_public"`
-	ThumbnailURL string    `json:"thumbnail_url,omitempty"`
-	Tags         []string  `json:"tags,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	QuestionCount *int     `json:"question_count,omitempty"` // Added via JOIN
+	ID            string    `json:"id"`
+	Title         string    `json:"title"`
+	Description   string    `json:"description,omitempty"`
+	CreatorID     string    `json:"creator_id"`
+	Category      string    `json:"category,omitempty"`
+	Difficulty    string    `json:"difficulty,omitempty"`
+	IsPublished   bool      `json:"is_published"`
+	PublishStatus string    `json:"publish_status,omitempty"`
+	IsPublic      bool      `json:"is_public"`
+	ThumbnailURL  string    `json:"thumbnail_url,omitempty"`
+	Tags          []string  `json:"tags,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	QuestionCount *int      `json:"question_count,omitempty"` // Added via JOIN
 }
 
 // QuizWithQuestions represents a quiz with all its questions

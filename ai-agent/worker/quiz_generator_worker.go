@@ -13,6 +13,7 @@ import (
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	notificationcore "github.com/affanahmad024/quiz-craft/backend/notification/core"
 	notificationmodel "github.com/affanahmad024/quiz-craft/backend/notification/model"
+	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 	"github.com/google/uuid"
 )
 
@@ -124,6 +125,11 @@ func (w *QuizGeneratorWorker) ProcessJob(ctx context.Context, job *model.Generat
 
 	// Update progress: 10%
 	dao.UpdateJobProgress(ctx, jobUUID, 10)
+
+	if job.JobType == "enrichment" {
+		w.ProcessEnrichmentJob(ctx, job, jobUUID)
+		return
+	}
 
 	// Generate or extract quiz using AI based on job type
 	var aiResponse *model.AIQuizResponse
@@ -293,5 +299,123 @@ func (w *QuizGeneratorWorker) notifyJobCompleted(ctx context.Context, job *model
 	})
 	if err != nil {
 		commons.LogE(ctx, "[worker.notifyJobCompleted::CreateErr [job_id=%s [err=%v", job.ID, err)
+	}
+}
+
+// ProcessEnrichmentJob enriches missing quiz/question metadata and auto-publishes on success.
+func (w *QuizGeneratorWorker) ProcessEnrichmentJob(ctx context.Context, job *model.GenerationJob, jobUUID uuid.UUID) {
+	if job.QuizID == nil || *job.QuizID == "" {
+		w.failJob(ctx, jobUUID, "No quiz provided for enrichment")
+		return
+	}
+
+	quizUUID, err := uuid.Parse(*job.QuizID)
+	if err != nil {
+		w.failJob(ctx, jobUUID, "Invalid quiz ID for enrichment")
+		return
+	}
+
+	if err := quizdao.UpdatePublishWorkflowStatus(ctx, quizUUID, false, "enrichment_processing", &jobUUID); err != nil {
+		w.failJob(ctx, jobUUID, "Failed to update publish status: "+err.Error())
+		return
+	}
+
+	dao.UpdateJobProgress(ctx, jobUUID, 25)
+
+	quiz, err := quizdao.FindByID(ctx, quizUUID)
+	if err != nil {
+		w.failEnrichmentJob(ctx, job, jobUUID, quizUUID, "Failed to load quiz: "+err.Error())
+		return
+	}
+
+	questions, err := quizdao.ListByQuizID(ctx, quizUUID)
+	if err != nil {
+		w.failEnrichmentJob(ctx, job, jobUUID, quizUUID, "Failed to load questions: "+err.Error())
+		return
+	}
+
+	dao.UpdateJobProgress(ctx, jobUUID, 45)
+
+	enrichment, err := w.aiService.EnrichQuizMetadata(ctx, quiz, questions)
+	if err != nil {
+		w.failEnrichmentJob(ctx, job, jobUUID, quizUUID, "AI enrichment failed: "+err.Error())
+		return
+	}
+
+	dao.UpdateJobProgress(ctx, jobUUID, 75)
+
+	if err := quizdao.ApplyQuizEnrichment(ctx, quizUUID, enrichment.Quiz.Difficulty, enrichment.Quiz.Description, enrichment.Quiz.Tags); err != nil {
+		w.failEnrichmentJob(ctx, job, jobUUID, quizUUID, "Failed to apply quiz enrichment: "+err.Error())
+		return
+	}
+
+	for _, q := range enrichment.Questions {
+		questionUUID, err := uuid.Parse(q.ID)
+		if err != nil {
+			continue
+		}
+		if err := quizdao.ApplyQuestionEnrichment(ctx, questionUUID, q.Difficulty, q.Explanation, q.Tags); err != nil {
+			w.failEnrichmentJob(ctx, job, jobUUID, quizUUID, "Failed to apply question enrichment: "+err.Error())
+			return
+		}
+	}
+
+	dao.UpdateJobProgress(ctx, jobUUID, 90)
+
+	if err := quizdao.UpdatePublishWorkflowStatus(ctx, quizUUID, true, "published", &jobUUID); err != nil {
+		w.failEnrichmentJob(ctx, job, jobUUID, quizUUID, "Failed to publish quiz: "+err.Error())
+		return
+	}
+
+	if err := dao.CompleteJob(ctx, jobUUID, *job.QuizID); err != nil {
+		commons.LogE(ctx, "[worker.ProcessEnrichmentJob::CompleteErr [job_id=%s [err=%v", job.ID, err)
+		return
+	}
+
+	w.notifyEnrichmentCompleted(ctx, job, quiz.Title)
+	commons.Log(ctx, "[worker.ProcessEnrichmentJob::OK [job_id=%s [quiz_id=%s", job.ID, *job.QuizID)
+}
+
+func (w *QuizGeneratorWorker) failEnrichmentJob(ctx context.Context, job *model.GenerationJob, jobID uuid.UUID, quizID uuid.UUID, errorMessage string) {
+	quizdao.UpdatePublishWorkflowStatus(ctx, quizID, false, "enrichment_failed", &jobID)
+	w.failJob(ctx, jobID, errorMessage)
+	w.notifyEnrichmentFailed(ctx, job, errorMessage)
+}
+
+func (w *QuizGeneratorWorker) notifyEnrichmentCompleted(ctx context.Context, job *model.GenerationJob, quizTitle string) {
+	if w.notificationSvc == nil {
+		return
+	}
+	userID, err := uuid.Parse(job.UserID)
+	if err != nil {
+		return
+	}
+	_, err = w.notificationSvc.CreateNotification(ctx, userID, notificationmodel.NotificationTypeSystem, "Quiz published", "Your quiz has been enriched and published.", map[string]interface{}{
+		"job_id":     job.ID,
+		"quiz_id":    job.QuizID,
+		"quiz_title": quizTitle,
+		"action":     "published",
+	})
+	if err != nil {
+		commons.LogE(ctx, "[worker.notifyEnrichmentCompleted::CreateErr [job_id=%s [err=%v", job.ID, err)
+	}
+}
+
+func (w *QuizGeneratorWorker) notifyEnrichmentFailed(ctx context.Context, job *model.GenerationJob, errorMessage string) {
+	if w.notificationSvc == nil {
+		return
+	}
+	userID, err := uuid.Parse(job.UserID)
+	if err != nil {
+		return
+	}
+	_, err = w.notificationSvc.CreateNotification(ctx, userID, notificationmodel.NotificationTypeSystem, "Quiz publishing needs attention", "AI enrichment failed, so your quiz was not published. Please retry publishing.", map[string]interface{}{
+		"job_id":  job.ID,
+		"quiz_id": job.QuizID,
+		"error":   errorMessage,
+		"action":  "publish_failed",
+	})
+	if err != nil {
+		commons.LogE(ctx, "[worker.notifyEnrichmentFailed::CreateErr [job_id=%s [err=%v", job.ID, err)
 	}
 }

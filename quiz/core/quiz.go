@@ -3,8 +3,10 @@ package core
 import (
 	"context"
 	"fmt"
+	"time"
 
 	aidao "github.com/affanahmad024/quiz-craft/backend/ai-agent/dao"
+	aimodel "github.com/affanahmad024/quiz-craft/backend/ai-agent/model"
 	"github.com/affanahmad024/quiz-craft/backend/commons"
 	quizdao "github.com/affanahmad024/quiz-craft/backend/quiz/dao"
 	"github.com/affanahmad024/quiz-craft/backend/quiz/model"
@@ -26,6 +28,7 @@ func CreateQuiz(ctx context.Context, creatorID string, input model.QuizInput) (*
 		TimeLimitMinutes: input.TimeLimitMinutes,
 		PassingScore:     input.PassingScore,
 		IsPublished:      false, // New quizzes start unpublished
+		PublishStatus:    "draft",
 		IsPublic:         input.IsPublic,
 		Tags:             input.Tags,
 		Meta:             input.Meta,
@@ -351,13 +354,35 @@ func PublishQuiz(ctx context.Context, quizID string, userID string) error {
 		return commons.BadInput("quiz-must-have-at-least-one-question")
 	}
 
-	// Update publish status
-	if err := quizdao.UpdatePublishStatus(ctx, quizUUID, true); err != nil {
-		commons.LogE(ctx, "[core.PublishQuiz::UpdateErr [quiz_id=%s [err=%v", quizID, err)
+	jobID := uuid.New()
+	job := &aimodel.GenerationJob{
+		ID:      jobID.String(),
+		UserID:  userID,
+		QuizID:  &quizID,
+		JobType: "enrichment",
+		Options: aimodel.QuizGenOptions{
+			NumQuestions: count,
+			Difficulty:   "medium",
+			QuestionType: "mixed",
+			Category:     "general",
+			Language:     "en",
+		},
+		Status:    "pending",
+		Progress:  0,
+		CreatedAt: time.Now(),
+	}
+
+	if err := aidao.CreateJob(ctx, job); err != nil {
+		commons.LogE(ctx, "[core.PublishQuiz::CreateEnrichmentJobErr [quiz_id=%s [err=%v", quizID, err)
 		return err
 	}
 
-	commons.Log(ctx, "[core.PublishQuiz::OK [quiz_id=%s", quizID)
+	if err := quizdao.UpdatePublishWorkflowStatus(ctx, quizUUID, false, "enrichment_pending", &jobID); err != nil {
+		commons.LogE(ctx, "[core.PublishQuiz::WorkflowStatusErr [quiz_id=%s [err=%v", quizID, err)
+		return err
+	}
+
+	commons.Log(ctx, "[core.PublishQuiz::Queued [quiz_id=%s [job_id=%s", quizID, job.ID)
 	return nil
 }
 
@@ -494,6 +519,8 @@ func AddQuestion(ctx context.Context, quizID string, userID string, input model.
 		QuizID:       quizID,
 		QuestionText: input.QuestionText,
 		QuestionType: input.QuestionType,
+		Difficulty:   input.Difficulty,
+		Tags:         input.Tags,
 		Points:       input.Points,
 		OrderIndex:   count, // Append to end
 		Explanation:  input.Explanation,
@@ -626,6 +653,8 @@ func AddQuestionsBulk(ctx context.Context, quizID string, userID string, input m
 			QuizID:       quizID,
 			QuestionText: questionInput.QuestionText,
 			QuestionType: questionInput.QuestionType,
+			Difficulty:   questionInput.Difficulty,
+			Tags:         questionInput.Tags,
 			Points:       questionInput.Points,
 			OrderIndex:   startOrderIndex + i,
 			Explanation:  questionInput.Explanation,
@@ -723,6 +752,12 @@ func UpdateQuestion(ctx context.Context, questionID string, userID string, input
 	}
 	if input.QuestionType != "" {
 		question.QuestionType = input.QuestionType
+	}
+	if input.Difficulty != nil {
+		question.Difficulty = *input.Difficulty
+	}
+	if input.Tags != nil {
+		question.Tags = input.Tags
 	}
 	if input.Points != nil {
 		question.Points = *input.Points

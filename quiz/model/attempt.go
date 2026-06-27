@@ -7,36 +7,36 @@ import (
 
 // QuizAttempt represents a user's attempt to take a quiz
 type QuizAttempt struct {
-	ID                string     `json:"id"`
-	QuizID            string     `json:"quiz_id"`
-	UserID            string     `json:"user_id"`
-	Status            string     `json:"status"` // in_progress, submitted, expired, abandoned
-	StartedAt         time.Time  `json:"started_at"`
-	SubmittedAt       *time.Time `json:"submitted_at,omitempty"`
-	TimeLimitSeconds  *int       `json:"time_limit_seconds,omitempty"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
-	Score             *float64   `json:"score,omitempty"`
-	MaxScore          *int       `json:"max_score,omitempty"`
-	Percentage        *float64   `json:"percentage,omitempty"`
-	Passed            *bool      `json:"passed,omitempty"`
-	Meta              JSONMap    `json:"meta,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID               string     `json:"id"`
+	QuizID           string     `json:"quiz_id"`
+	UserID           string     `json:"user_id"`
+	Status           string     `json:"status"` // in_progress, submitted, expired, abandoned
+	StartedAt        time.Time  `json:"started_at"`
+	SubmittedAt      *time.Time `json:"submitted_at,omitempty"`
+	TimeLimitSeconds *int       `json:"time_limit_seconds,omitempty"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	Score            *float64   `json:"score,omitempty"`
+	MaxScore         *int       `json:"max_score,omitempty"`
+	Percentage       *float64   `json:"percentage,omitempty"`
+	Passed           *bool      `json:"passed,omitempty"`
+	Meta             JSONMap    `json:"meta,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // UserAnswer represents an answer submitted by a user during an attempt
 type UserAnswer struct {
-	ID           string     `json:"id"`
-	AttemptID    string     `json:"attempt_id"`
-	QuestionID   string     `json:"question_id"`
-	AnswerID     *string    `json:"answer_id,omitempty"`     // For MC/TF questions
-	AnswerText   *string    `json:"answer_text,omitempty"`   // For short answer questions
-	IsCorrect    *bool      `json:"is_correct,omitempty"`
-	PointsEarned float64    `json:"points_earned"`
-	AnsweredAt   time.Time  `json:"answered_at"`
-	Meta         JSONMap    `json:"meta,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID           string    `json:"id"`
+	AttemptID    string    `json:"attempt_id"`
+	QuestionID   string    `json:"question_id"`
+	AnswerID     *string   `json:"answer_id,omitempty"`
+	AnswerText   *string   `json:"answer_text,omitempty"`
+	IsCorrect    *bool     `json:"is_correct,omitempty"`
+	PointsEarned float64   `json:"points_earned"`
+	AnsweredAt   time.Time `json:"answered_at"`
+	Meta         JSONMap   `json:"meta,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // AttemptWithAnswers represents an attempt with all user answers
@@ -48,23 +48,35 @@ type AttemptWithAnswers struct {
 // AttemptResult represents the result of a quiz attempt with details
 type AttemptResult struct {
 	QuizAttempt
-	QuizTitle       string                  `json:"quiz_title"`
-	QuizDescription string                  `json:"quiz_description"`
-	Answers         []UserAnswerWithDetails `json:"answers"`
-	TotalQuestions  int                     `json:"total_questions"`
-	AnsweredCount   int                     `json:"answered_count"`
+	QuizTitle           string                  `json:"quiz_title"`
+	QuizDescription     string                  `json:"quiz_description"`
+	Answers             []UserAnswerWithDetails `json:"answers"`
+	DifficultyBreakdown []DifficultyAttemptStat `json:"difficulty_breakdown,omitempty"`
+	TotalQuestions      int                     `json:"total_questions"`
+	AnsweredCount       int                     `json:"answered_count"`
+}
+
+// DifficultyAttemptStat summarizes attempt outcomes grouped by question difficulty.
+type DifficultyAttemptStat struct {
+	Difficulty    string `json:"difficulty"`
+	Total         int    `json:"total"`
+	Correct       int    `json:"correct"`
+	Wrong         int    `json:"wrong"`
+	Unanswered    int    `json:"unanswered"`
+	PendingReview int    `json:"pending_review"`
 }
 
 // UserAnswerWithDetails represents a user answer with question and correct answer details
 type UserAnswerWithDetails struct {
 	UserAnswer
-	QuestionText       string   `json:"question_text"`
-	QuestionType       string   `json:"question_type"`
-	QuestionPoints     int      `json:"question_points"`
-	QuestionMeta       JSONMap  `json:"question_meta,omitempty"`
-	Explanation        *string  `json:"explanation,omitempty"`
-	SelectedAnswerText *string  `json:"selected_answer_text,omitempty"`
-	CorrectAnswerText  *string  `json:"correct_answer_text,omitempty"`
+	QuestionText       string  `json:"question_text"`
+	QuestionType       string  `json:"question_type"`
+	QuestionDifficulty string  `json:"question_difficulty,omitempty"`
+	QuestionPoints     int     `json:"question_points"`
+	QuestionMeta       JSONMap `json:"question_meta,omitempty"`
+	Explanation        *string `json:"explanation,omitempty"`
+	SelectedAnswerText *string `json:"selected_answer_text,omitempty"`
+	CorrectAnswerText  *string `json:"correct_answer_text,omitempty"`
 }
 
 // AttemptListItem represents a simplified attempt for list views
@@ -96,8 +108,8 @@ type StartAttemptInput struct {
 // SubmitAnswerInput represents input for submitting an answer
 type SubmitAnswerInput struct {
 	QuestionID string  `json:"question_id" binding:"required"`
-	AnswerID   *string `json:"answer_id,omitempty"`   // For MC/TF
-	AnswerText *string `json:"answer_text,omitempty"` // For short answer
+	AnswerID   *string `json:"answer_id,omitempty"`
+	AnswerText *string `json:"answer_text,omitempty"`
 }
 
 // AttemptListFilter represents filters for listing attempts
@@ -121,21 +133,15 @@ func (i *SubmitAnswerInput) Validate() error {
 	if i.QuestionID == "" {
 		return errors.New("question_id is required")
 	}
-
-	// Must provide either answer_id or answer_text, but not both
 	if i.AnswerID != nil && i.AnswerText != nil {
 		return errors.New("provide either answer_id or answer_text, not both")
 	}
-
 	if i.AnswerID == nil && i.AnswerText == nil {
 		return errors.New("either answer_id or answer_text must be provided")
 	}
-
-	// Validate answer_text length if provided
 	if i.AnswerText != nil && len(*i.AnswerText) > 2000 {
 		return errors.New("answer_text must not exceed 2000 characters")
 	}
-
 	return nil
 }
 
@@ -172,12 +178,10 @@ func (a *QuizAttempt) TimeRemaining() *int {
 	if a.ExpiresAt == nil {
 		return nil
 	}
-
 	remaining := int(time.Until(*a.ExpiresAt).Seconds())
 	if remaining < 0 {
 		remaining = 0
 	}
-
 	return &remaining
 }
 

@@ -131,10 +131,33 @@ type AIQuizResponse struct {
 type AIQuestion struct {
 	QuestionText string     `json:"question_text"`
 	QuestionType string     `json:"question_type"` // multiple_choice, true_false
+	Difficulty   string     `json:"difficulty,omitempty"`
+	Tags         []string   `json:"tags,omitempty"`
 	Points       int        `json:"points"`
 	Explanation  string     `json:"explanation"`
 	Answers      []AIAnswer `json:"answers"`
-	ImageData    string     `json:"image_data,omitempty"` // Base64 encoded image data
+	ImageData    string     `json:"image_data,omitempty"`
+}
+
+// AIEnrichmentResponse represents AI metadata suggestions for an existing quiz.
+type AIEnrichmentResponse struct {
+	Quiz      AIQuizEnrichment       `json:"quiz"`
+	Questions []AIQuestionEnrichment `json:"questions"`
+}
+
+// AIQuizEnrichment contains quiz-level enrichment fields.
+type AIQuizEnrichment struct {
+	Difficulty  string   `json:"difficulty,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+// AIQuestionEnrichment contains question-level enrichment fields keyed by question ID.
+type AIQuestionEnrichment struct {
+	ID          string   `json:"id"`
+	Difficulty  string   `json:"difficulty,omitempty"`
+	Explanation string   `json:"explanation,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // AIAnswer represents a single answer option in the AI response
