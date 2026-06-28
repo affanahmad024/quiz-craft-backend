@@ -28,6 +28,10 @@ ALTER TABLE questions
 ALTER TABLE questions
     DROP CONSTRAINT IF EXISTS chk_questions_difficulty;
 
+UPDATE questions
+SET difficulty = NULL
+WHERE difficulty = '';
+
 ALTER TABLE questions
     ADD CONSTRAINT chk_questions_difficulty
     CHECK (difficulty IS NULL OR difficulty IN ('easy', 'medium', 'hard'));
@@ -46,3 +50,4 @@ COMMENT ON COLUMN quizzes.publish_status IS 'Publishing workflow state, includin
 COMMENT ON COLUMN quizzes.ai_enrichment_job_id IS 'Latest async AI enrichment job associated with quiz publishing';
 COMMENT ON COLUMN questions.difficulty IS 'Question-level difficulty: easy, medium, hard';
 COMMENT ON COLUMN questions.tags IS 'Question-level search/enrichment tags';
+

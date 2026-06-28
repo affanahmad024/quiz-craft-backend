@@ -20,7 +20,7 @@ func CreateQuestion(ctx context.Context, question *model.Question) error {
 				id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
 				explanation, meta, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
+				$1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10, NOW(), NOW()
 			) RETURNING created_at, updated_at`
 
 	err := db.QueryRowContext(ctx, qry,
@@ -161,7 +161,7 @@ func UpdateQuestion(ctx context.Context, question *model.Question) error {
 
 	metaJSON, _ := json.Marshal(question.Meta)
 	qry := `UPDATE questions
-			SET question_text = $1, question_type = $2, difficulty = $3, tags = $4,
+			SET question_text = $1, question_type = $2, difficulty = NULLIF($3, ''), tags = $4,
 				points = $5, order_index = $6, explanation = $7, meta = $8, updated_at = NOW()
 			WHERE id = $9`
 
@@ -286,7 +286,7 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 				id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
 				explanation, meta, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
+				$1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10, NOW(), NOW()
 			) RETURNING created_at, updated_at`
 
 	for _, question := range questions {
