@@ -9,18 +9,20 @@ import (
 
 // Question represents a question in a quiz
 type Question struct {
-	ID           string         `json:"id"`
-	QuizID       string         `json:"quiz_id"`
-	QuestionText string         `json:"question_text"`
-	QuestionType string         `json:"question_type"` // multiple_choice, true_false, short_answer
-	Difficulty   string         `json:"difficulty,omitempty"`
-	Tags         pq.StringArray `json:"tags,omitempty"`
-	Points       int            `json:"points"`
-	OrderIndex   int            `json:"order_index"`
-	Explanation  string         `json:"explanation,omitempty"`
-	Meta         JSONMap        `json:"meta,omitempty"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID                string         `json:"id"`
+	QuizID            string         `json:"quiz_id"`
+	SectionID         string         `json:"section_id"`
+	QuestionText      string         `json:"question_text"`
+	QuestionType      string         `json:"question_type"` // multiple_choice, true_false, short_answer
+	Difficulty        string         `json:"difficulty,omitempty"`
+	Tags              pq.StringArray `json:"tags,omitempty"`
+	Points            int            `json:"points"`
+	OrderIndex        int            `json:"order_index"`
+	SectionOrderIndex int            `json:"section_order_index"`
+	Explanation       string         `json:"explanation,omitempty"`
+	Meta              JSONMap        `json:"meta,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
 
 	// Answers can be either []Answer (with is_correct) or []AnswerListItem (without is_correct)
 	// This field is populated dynamically and not stored in DB
@@ -110,6 +112,7 @@ type QuestionReorder struct {
 type QuestionInput struct {
 	QuestionText string        `json:"question_text"`
 	QuestionType string        `json:"question_type"`
+	SectionID    string        `json:"section_id,omitempty"`
 	Difficulty   string        `json:"difficulty,omitempty"`
 	Tags         []string      `json:"tags,omitempty"`
 	Points       int           `json:"points"`
@@ -128,6 +131,7 @@ type BulkQuestionsInput struct {
 type QuestionUpdateInput struct {
 	QuestionText string   `json:"question_text,omitempty"`
 	QuestionType string   `json:"question_type,omitempty"`
+	SectionID    *string  `json:"section_id,omitempty"`
 	Difficulty   *string  `json:"difficulty,omitempty"`
 	Tags         []string `json:"tags,omitempty"`
 	Points       *int     `json:"points,omitempty"`

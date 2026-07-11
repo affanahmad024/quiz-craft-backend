@@ -46,6 +46,12 @@ func CreateQuiz(ctx context.Context, creatorID string, input model.QuizInput) (*
 		return nil, err
 	}
 
+	quizUUID, _ := uuid.Parse(quiz.ID)
+	if _, err := quizdao.EnsureDefaultSection(ctx, quizUUID); err != nil {
+		commons.LogE(ctx, "[core.CreateQuiz::DefaultSectionErr [quiz_id=%s [err=%v", quiz.ID, err)
+		return nil, err
+	}
+
 	commons.Log(ctx, "[core.CreateQuiz::OK [quiz_id=%s", quiz.ID)
 	return quiz, nil
 }
@@ -94,6 +100,19 @@ func GetQuizWithQuestions(ctx context.Context, quizID string, userID string, hid
 	if !quiz.IsAccessibleBy(userID) {
 		commons.LogW(ctx, "[core.GetQuizWithQuestions::AccessDenied [quiz_id=%s [user_id=%s", quizID, userID)
 		return nil, commons.Forbidden("access-denied")
+	}
+
+	sections, err := quizdao.ListSectionsByQuizID(ctx, quizUUID)
+	if err != nil {
+		commons.LogE(ctx, "[core.GetQuizWithQuestions::ListSectionsErr [quiz_id=%s [err=%v", quizID, err)
+		return nil, err
+	}
+	if len(sections) == 0 {
+		defaultSection, err := quizdao.EnsureDefaultSection(ctx, quizUUID)
+		if err != nil {
+			return nil, err
+		}
+		sections = []*model.QuizSection{defaultSection}
 	}
 
 	// Get questions
@@ -145,9 +164,22 @@ func GetQuizWithQuestions(ctx context.Context, quizID string, userID string, hid
 		questionsWithAnswers = append(questionsWithAnswers, *question)
 	}
 
+	sectionModels := make([]model.QuizSection, 0, len(sections))
+	sectionIndex := map[string]int{}
+	for _, section := range sections {
+		sectionModels = append(sectionModels, *section)
+		sectionIndex[section.ID] = len(sectionModels) - 1
+	}
+	for _, question := range questionsWithAnswers {
+		if idx, ok := sectionIndex[question.SectionID]; ok {
+			sectionModels[idx].Questions = append(sectionModels[idx].Questions, question)
+		}
+	}
+
 	result := &model.QuizWithQuestions{
 		Quiz:      *quiz,
 		Questions: questionsWithAnswers,
+		Sections:  sectionModels,
 	}
 
 	commons.Log(ctx, "[core.GetQuizWithQuestions::OK [quiz_id=%s [question_count=%d", quizID, len(questions))
@@ -478,6 +510,17 @@ func AddQuestion(ctx context.Context, quizID string, userID string, input model.
 		return nil, err
 	}
 
+	section, err := resolveQuestionSection(ctx, quizUUID, input.SectionID)
+	if err != nil {
+		return nil, err
+	}
+	sectionUUID, _ := uuid.Parse(section.ID)
+	sectionOrderIndex, err := quizdao.NextSectionQuestionOrderIndex(ctx, sectionUUID)
+	if err != nil {
+		commons.LogE(ctx, "[core.AddQuestion::SectionOrderErr [quiz_id=%s [section_id=%s [err=%v", quizID, section.ID, err)
+		return nil, err
+	}
+
 	// Initialize meta if nil
 	if input.Meta == nil {
 		input.Meta = model.JSONMap{}
@@ -515,16 +558,18 @@ func AddQuestion(ctx context.Context, quizID string, userID string, input model.
 
 	// Create question
 	question := &model.Question{
-		ID:           uuid.New().String(),
-		QuizID:       quizID,
-		QuestionText: input.QuestionText,
-		QuestionType: input.QuestionType,
-		Difficulty:   input.Difficulty,
-		Tags:         input.Tags,
-		Points:       input.Points,
-		OrderIndex:   count, // Append to end
-		Explanation:  input.Explanation,
-		Meta:         input.Meta,
+		ID:                uuid.New().String(),
+		QuizID:            quizID,
+		SectionID:         section.ID,
+		QuestionText:      input.QuestionText,
+		QuestionType:      input.QuestionType,
+		Difficulty:        input.Difficulty,
+		Tags:              input.Tags,
+		Points:            input.Points,
+		OrderIndex:        count, // Append to end
+		SectionOrderIndex: sectionOrderIndex,
+		Explanation:       input.Explanation,
+		Meta:              input.Meta,
 	}
 
 	// Validate question
@@ -608,11 +653,35 @@ func AddQuestionsBulk(ctx context.Context, quizID string, userID string, input m
 		return nil, err
 	}
 
+	defaultSection, err := quizdao.EnsureDefaultSection(ctx, quizUUID)
+	if err != nil {
+		return nil, err
+	}
+	sectionOrderByID := map[string]int{}
+
 	// Prepare questions and answers
 	questions := make([]*model.Question, 0, len(input.Questions))
 	allAnswers := make([]*model.Answer, 0)
 
 	for i, questionInput := range input.Questions {
+		sectionID := questionInput.SectionID
+		if sectionID == "" {
+			sectionID = defaultSection.ID
+		}
+		section, err := resolveQuestionSection(ctx, quizUUID, sectionID)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := sectionOrderByID[section.ID]; !ok {
+			sectionUUID, _ := uuid.Parse(section.ID)
+			nextIndex, err := quizdao.NextSectionQuestionOrderIndex(ctx, sectionUUID)
+			if err != nil {
+				return nil, err
+			}
+			sectionOrderByID[section.ID] = nextIndex
+		}
+		sectionOrderIndex := sectionOrderByID[section.ID]
+		sectionOrderByID[section.ID] = sectionOrderIndex + 1
 		// Initialize meta if nil
 		if questionInput.Meta == nil {
 			questionInput.Meta = model.JSONMap{}
@@ -649,16 +718,18 @@ func AddQuestionsBulk(ctx context.Context, quizID string, userID string, input m
 
 		// Create question
 		question := &model.Question{
-			ID:           uuid.New().String(),
-			QuizID:       quizID,
-			QuestionText: questionInput.QuestionText,
-			QuestionType: questionInput.QuestionType,
-			Difficulty:   questionInput.Difficulty,
-			Tags:         questionInput.Tags,
-			Points:       questionInput.Points,
-			OrderIndex:   startOrderIndex + i,
-			Explanation:  questionInput.Explanation,
-			Meta:         questionInput.Meta,
+			ID:                uuid.New().String(),
+			QuizID:            quizID,
+			SectionID:         section.ID,
+			QuestionText:      questionInput.QuestionText,
+			QuestionType:      questionInput.QuestionType,
+			Difficulty:        questionInput.Difficulty,
+			Tags:              questionInput.Tags,
+			Points:            questionInput.Points,
+			OrderIndex:        startOrderIndex + i,
+			SectionOrderIndex: sectionOrderIndex,
+			Explanation:       questionInput.Explanation,
+			Meta:              questionInput.Meta,
 		}
 
 		// Validate question
@@ -744,6 +815,20 @@ func UpdateQuestion(ctx context.Context, questionID string, userID string, input
 	if !quiz.IsOwnedBy(userID) {
 		commons.LogW(ctx, "[core.UpdateQuestion::NotOwner [quiz_id=%s [user_id=%s", question.QuizID, userID)
 		return nil, commons.Forbidden("not-quiz-owner")
+	}
+
+	if input.SectionID != nil && *input.SectionID != "" && *input.SectionID != question.SectionID {
+		section, err := resolveQuestionSection(ctx, quizUUID, *input.SectionID)
+		if err != nil {
+			return nil, err
+		}
+		sectionUUID, _ := uuid.Parse(section.ID)
+		sectionOrderIndex, err := quizdao.NextSectionQuestionOrderIndex(ctx, sectionUUID)
+		if err != nil {
+			return nil, err
+		}
+		question.SectionID = section.ID
+		question.SectionOrderIndex = sectionOrderIndex
 	}
 
 	// Update fields
@@ -1095,4 +1180,193 @@ func DeleteAnswer(ctx context.Context, answerID string, userID string) error {
 
 	commons.Log(ctx, "[core.DeleteAnswer::OK [answer_id=%s", answerID)
 	return nil
+}
+
+func resolveQuestionSection(ctx context.Context, quizID uuid.UUID, sectionID string) (*model.QuizSection, error) {
+	if sectionID == "" {
+		return quizdao.EnsureDefaultSection(ctx, quizID)
+	}
+	sectionUUID, err := uuid.Parse(sectionID)
+	if err != nil {
+		return nil, commons.BadInput("invalid-section-id")
+	}
+	section, err := quizdao.FindSectionByID(ctx, sectionUUID)
+	if err != nil {
+		return nil, err
+	}
+	if section.QuizID != quizID.String() {
+		return nil, commons.BadInput("section-does-not-belong-to-quiz")
+	}
+	return section, nil
+}
+
+func requireQuizOwner(ctx context.Context, quizID string, userID string) (*model.Quiz, uuid.UUID, error) {
+	quizUUID, err := uuid.Parse(quizID)
+	if err != nil {
+		return nil, uuid.Nil, commons.BadInput("invalid-quiz-id")
+	}
+	quiz, err := quizdao.FindByID(ctx, quizUUID)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	if !quiz.IsOwnedBy(userID) {
+		return nil, uuid.Nil, commons.Forbidden("not-quiz-owner")
+	}
+	return quiz, quizUUID, nil
+}
+
+// ListSections lists sections for a quiz.
+func ListSections(ctx context.Context, quizID string, userID string) ([]model.QuizSection, error) {
+	_, quizUUID, err := requireQuizOwner(ctx, quizID, userID)
+	if err != nil {
+		return nil, err
+	}
+	sections, err := quizdao.ListSectionsByQuizID(ctx, quizUUID)
+	if err != nil {
+		return nil, err
+	}
+	if len(sections) == 0 {
+		section, err := quizdao.EnsureDefaultSection(ctx, quizUUID)
+		if err != nil {
+			return nil, err
+		}
+		sections = []*model.QuizSection{section}
+	}
+	result := make([]model.QuizSection, 0, len(sections))
+	for _, section := range sections {
+		result = append(result, *section)
+	}
+	return result, nil
+}
+
+// CreateSection creates a section for a quiz.
+func CreateSection(ctx context.Context, quizID string, userID string, input model.QuizSectionInput) (*model.QuizSection, error) {
+	_, quizUUID, err := requireQuizOwner(ctx, quizID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if input.Title == "" {
+		return nil, commons.BadInput("section-title-required")
+	}
+	orderIndex, err := quizdao.NextSectionOrderIndex(ctx, quizUUID)
+	if err != nil {
+		return nil, err
+	}
+	section := &model.QuizSection{
+		ID:               uuid.New().String(),
+		QuizID:           quizID,
+		Title:            input.Title,
+		Description:      input.Description,
+		Instructions:     input.Instructions,
+		OrderIndex:       orderIndex,
+		TimeLimitMinutes: input.TimeLimitMinutes,
+		IsDefault:        false,
+		Meta:             input.Meta,
+	}
+	if section.Meta == nil {
+		section.Meta = model.JSONMap{}
+	}
+	if err := quizdao.CreateSection(ctx, section); err != nil {
+		return nil, err
+	}
+	return section, nil
+}
+
+// UpdateSection updates section metadata.
+func UpdateSection(ctx context.Context, quizID string, sectionID string, userID string, input model.QuizSectionUpdateInput) (*model.QuizSection, error) {
+	_, quizUUID, err := requireQuizOwner(ctx, quizID, userID)
+	if err != nil {
+		return nil, err
+	}
+	section, err := resolveQuestionSection(ctx, quizUUID, sectionID)
+	if err != nil {
+		return nil, err
+	}
+	if section.IsDefault && input.Title != nil && *input.Title != "General" {
+		return nil, commons.BadInput("default-section-title-cannot-change")
+	}
+	if input.Title != nil {
+		if *input.Title == "" {
+			return nil, commons.BadInput("section-title-required")
+		}
+		section.Title = *input.Title
+	}
+	if input.Description != nil {
+		section.Description = *input.Description
+	}
+	if input.Instructions != nil {
+		section.Instructions = *input.Instructions
+	}
+	if input.TimeLimitMinutes != nil {
+		section.TimeLimitMinutes = input.TimeLimitMinutes
+	}
+	if input.Meta != nil {
+		section.Meta = input.Meta
+	}
+	if err := quizdao.UpdateSection(ctx, section); err != nil {
+		return nil, err
+	}
+	return section, nil
+}
+
+// DeleteSection deletes a section and moves questions to General.
+func DeleteSection(ctx context.Context, quizID string, sectionID string, userID string) error {
+	_, quizUUID, err := requireQuizOwner(ctx, quizID, userID)
+	if err != nil {
+		return err
+	}
+	sectionUUID, err := uuid.Parse(sectionID)
+	if err != nil {
+		return commons.BadInput("invalid-section-id")
+	}
+	return quizdao.DeleteSectionMoveQuestionsToDefault(ctx, quizUUID, sectionUUID)
+}
+
+// ReorderSections reorders quiz sections.
+func ReorderSections(ctx context.Context, quizID string, userID string, input model.SectionReorderInput) error {
+	_, quizUUID, err := requireQuizOwner(ctx, quizID, userID)
+	if err != nil {
+		return err
+	}
+	return quizdao.ReorderSections(ctx, quizUUID, input.Sections)
+}
+
+// ReorderQuestionsInSections reorders and moves questions between sections.
+func ReorderQuestionsInSections(ctx context.Context, quizID string, userID string, input model.QuestionSectionReorderInput) error {
+	_, quizUUID, err := requireQuizOwner(ctx, quizID, userID)
+	if err != nil {
+		return err
+	}
+	return quizdao.ReorderQuestionsInSections(ctx, quizUUID, input.Questions)
+}
+
+// MoveQuestionToSection moves a single question to the end of a section.
+func MoveQuestionToSection(ctx context.Context, questionID string, userID string, input model.QuestionSectionUpdateInput) (*model.Question, error) {
+	questionUUID, err := uuid.Parse(questionID)
+	if err != nil {
+		return nil, commons.BadInput("invalid-question-id")
+	}
+	question, err := quizdao.FindQuestionByID(ctx, questionUUID)
+	if err != nil {
+		return nil, err
+	}
+	_, quizUUID, err := requireQuizOwner(ctx, question.QuizID, userID)
+	if err != nil {
+		return nil, err
+	}
+	section, err := resolveQuestionSection(ctx, quizUUID, input.SectionID)
+	if err != nil {
+		return nil, err
+	}
+	sectionUUID, _ := uuid.Parse(section.ID)
+	sectionOrderIndex, err := quizdao.NextSectionQuestionOrderIndex(ctx, sectionUUID)
+	if err != nil {
+		return nil, err
+	}
+	question.SectionID = section.ID
+	question.SectionOrderIndex = sectionOrderIndex
+	if err := quizdao.UpdateQuestion(ctx, question); err != nil {
+		return nil, err
+	}
+	return question, nil
 }

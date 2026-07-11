@@ -95,22 +95,31 @@ func (s *QuizGeneratorService) CreateQuizFromAIResponse(ctx context.Context, aiR
 		return "", err
 	}
 
+	quizUUID, _ := uuid.Parse(quiz.ID)
+	defaultSection, err := quizdao.EnsureDefaultSection(ctx, quizUUID)
+	if err != nil {
+		commons.LogE(ctx, "[services.CreateQuizFromAIResponse::DefaultSectionErr [quiz_id=%s [err=%v", quiz.ID, err)
+		return "", err
+	}
+
 	// Create questions and answers
 	for i, aiQuestion := range aiResponse.Questions {
 		// Create question
 		question := &quizmodel.Question{
-			ID:           uuid.New().String(),
-			QuizID:       quiz.ID,
-			QuestionText: aiQuestion.QuestionText,
-			QuestionType: aiQuestion.QuestionType,
-			Difficulty:   normalizeAIDifficulty(aiQuestion.Difficulty, options.Difficulty),
-			Tags:         aiQuestion.Tags,
-			Points:       aiQuestion.Points,
-			OrderIndex:   i,
-			Explanation:  aiQuestion.Explanation,
-			Meta:         map[string]interface{}{},
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
+			ID:                uuid.New().String(),
+			QuizID:            quiz.ID,
+			SectionID:         defaultSection.ID,
+			QuestionText:      aiQuestion.QuestionText,
+			QuestionType:      aiQuestion.QuestionType,
+			Difficulty:        normalizeAIDifficulty(aiQuestion.Difficulty, options.Difficulty),
+			Tags:              aiQuestion.Tags,
+			Points:            aiQuestion.Points,
+			OrderIndex:        i,
+			SectionOrderIndex: i,
+			Explanation:       aiQuestion.Explanation,
+			Meta:              map[string]interface{}{},
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
 		}
 
 		// Process and save question image if present
@@ -187,6 +196,16 @@ func (s *QuizGeneratorService) AddQuestionsToExistingQuiz(ctx context.Context, q
 		return commons.Forbidden("not-quiz-owner")
 	}
 
+	defaultSection, err := quizdao.EnsureDefaultSection(ctx, quizUUID)
+	if err != nil {
+		return err
+	}
+	defaultSectionUUID, _ := uuid.Parse(defaultSection.ID)
+	startSectionOrderIndex, err := quizdao.NextSectionQuestionOrderIndex(ctx, defaultSectionUUID)
+	if err != nil {
+		return err
+	}
+
 	// Get current max order index
 	existingQuestions, err := quizdao.ListByQuizID(ctx, quizUUID)
 	if err != nil {
@@ -213,18 +232,20 @@ func (s *QuizGeneratorService) AddQuestionsToExistingQuiz(ctx context.Context, q
 	for i, aiQuestion := range aiResponse.Questions {
 		// Create question
 		question := &quizmodel.Question{
-			ID:           uuid.New().String(),
-			QuizID:       quizID,
-			QuestionText: aiQuestion.QuestionText,
-			QuestionType: aiQuestion.QuestionType,
-			Difficulty:   normalizeAIDifficulty(aiQuestion.Difficulty, "medium"),
-			Tags:         aiQuestion.Tags,
-			Points:       aiQuestion.Points,
-			OrderIndex:   maxOrderIndex + i + 1,
-			Explanation:  aiQuestion.Explanation,
-			Meta:         map[string]interface{}{},
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
+			ID:                uuid.New().String(),
+			QuizID:            quizID,
+			SectionID:         defaultSection.ID,
+			QuestionText:      aiQuestion.QuestionText,
+			QuestionType:      aiQuestion.QuestionType,
+			Difficulty:        normalizeAIDifficulty(aiQuestion.Difficulty, "medium"),
+			Tags:              aiQuestion.Tags,
+			Points:            aiQuestion.Points,
+			OrderIndex:        maxOrderIndex + i + 1,
+			SectionOrderIndex: startSectionOrderIndex + i,
+			Explanation:       aiQuestion.Explanation,
+			Meta:              map[string]interface{}{},
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
 		}
 
 		// Process and save question image if present

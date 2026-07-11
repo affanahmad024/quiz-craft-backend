@@ -11,27 +11,71 @@ import (
 	"github.com/lib/pq"
 )
 
+const questionSelectColumns = `q.id, q.quiz_id, q.section_id, q.question_text, q.question_type, q.difficulty,
+	q.tags, q.points, q.order_index, q.section_order_index, q.explanation, q.meta, q.created_at, q.updated_at`
+
+func scanQuestion(row interface {
+	Scan(dest ...interface{}) error
+}) (*model.Question, error) {
+	question := &model.Question{}
+	var difficultySQL sql.NullString
+	var explanationSQL sql.NullString
+	var metaJSON []byte
+
+	err := row.Scan(
+		&question.ID,
+		&question.QuizID,
+		&question.SectionID,
+		&question.QuestionText,
+		&question.QuestionType,
+		&difficultySQL,
+		&question.Tags,
+		&question.Points,
+		&question.OrderIndex,
+		&question.SectionOrderIndex,
+		&explanationSQL,
+		&metaJSON,
+		&question.CreatedAt,
+		&question.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if difficultySQL.Valid {
+		question.Difficulty = difficultySQL.String
+	}
+	if explanationSQL.Valid {
+		question.Explanation = explanationSQL.String
+	}
+	if len(metaJSON) > 0 {
+		json.Unmarshal(metaJSON, &question.Meta)
+	}
+	return question, nil
+}
+
 // CreateQuestion creates a new question
 func CreateQuestion(ctx context.Context, question *model.Question) error {
 	commons.Log(ctx, "[dao.CreateQuestion [quiz_id=%s [question_text=%s", question.QuizID, question.QuestionText)
 
 	metaJSON, _ := json.Marshal(question.Meta)
 	qry := `INSERT INTO questions (
-				id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
-				explanation, meta, created_at, updated_at
+				id, quiz_id, section_id, question_text, question_type, difficulty, tags, points, order_index,
+				section_order_index, explanation, meta, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10, NOW(), NOW()
+				$1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, NOW(), NOW()
 			) RETURNING created_at, updated_at`
 
 	err := db.QueryRowContext(ctx, qry,
 		question.ID,
 		question.QuizID,
+		question.SectionID,
 		question.QuestionText,
 		question.QuestionType,
 		question.Difficulty,
 		pq.Array(question.Tags),
 		question.Points,
 		question.OrderIndex,
+		question.SectionOrderIndex,
 		question.Explanation,
 		metaJSON,
 	).Scan(&question.CreatedAt, &question.UpdatedAt)
@@ -49,31 +93,10 @@ func CreateQuestion(ctx context.Context, question *model.Question) error {
 func FindQuestionByID(ctx context.Context, id uuid.UUID) (*model.Question, error) {
 	commons.Log(ctx, "[dao.FindQuestionByID [id=%s", id)
 
-	question := &model.Question{}
-	qry := `SELECT id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
-			explanation, meta, created_at, updated_at
-			FROM questions
-			WHERE id = $1`
-
-	var difficultySQL sql.NullString
-	var explanationSQL sql.NullString
-	var metaJSON []byte
-
-	err := db.QueryRowContext(ctx, qry, id).Scan(
-		&question.ID,
-		&question.QuizID,
-		&question.QuestionText,
-		&question.QuestionType,
-		&difficultySQL,
-		&question.Tags,
-		&question.Points,
-		&question.OrderIndex,
-		&explanationSQL,
-		&metaJSON,
-		&question.CreatedAt,
-		&question.UpdatedAt,
-	)
-
+	qry := `SELECT ` + questionSelectColumns + `
+			FROM questions q
+			WHERE q.id = $1`
+	question, err := scanQuestion(db.QueryRowContext(ctx, qry, id))
 	if err == sql.ErrNoRows {
 		return nil, commons.NotFound("question-not-found")
 	}
@@ -81,17 +104,6 @@ func FindQuestionByID(ctx context.Context, id uuid.UUID) (*model.Question, error
 		commons.LogE(ctx, "[dao.FindQuestionByID::SQLErr [id=%s [err=%v", id, err)
 		return nil, err
 	}
-
-	if difficultySQL.Valid {
-		question.Difficulty = difficultySQL.String
-	}
-	if explanationSQL.Valid {
-		question.Explanation = explanationSQL.String
-	}
-	if len(metaJSON) > 0 {
-		json.Unmarshal(metaJSON, &question.Meta)
-	}
-
 	return question, nil
 }
 
@@ -100,11 +112,11 @@ func ListByQuizID(ctx context.Context, quizID uuid.UUID) ([]*model.Question, err
 	commons.Log(ctx, "[dao.ListByQuizID [quiz_id=%s", quizID)
 
 	questions := []*model.Question{}
-	qry := `SELECT id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
-			explanation, meta, created_at, updated_at
-			FROM questions
-			WHERE quiz_id = $1
-			ORDER BY order_index ASC`
+	qry := `SELECT ` + questionSelectColumns + `
+			FROM questions q
+			LEFT JOIN quiz_sections s ON s.id = q.section_id
+			WHERE q.quiz_id = $1
+			ORDER BY COALESCE(s.order_index, 0) ASC, q.section_order_index ASC, q.order_index ASC, q.created_at ASC`
 
 	rows, err := db.QueryContext(ctx, qry, quizID)
 	if err != nil {
@@ -114,45 +126,16 @@ func ListByQuizID(ctx context.Context, quizID uuid.UUID) ([]*model.Question, err
 	defer rows.Close()
 
 	for rows.Next() {
-		question := &model.Question{}
-		var difficultySQL sql.NullString
-		var explanationSQL sql.NullString
-		var metaJSON []byte
-
-		err := rows.Scan(
-			&question.ID,
-			&question.QuizID,
-			&question.QuestionText,
-			&question.QuestionType,
-			&difficultySQL,
-			&question.Tags,
-			&question.Points,
-			&question.OrderIndex,
-			&explanationSQL,
-			&metaJSON,
-			&question.CreatedAt,
-			&question.UpdatedAt,
-		)
+		question, err := scanQuestion(rows)
 		if err != nil {
 			commons.LogE(ctx, "[dao.ListByQuizID::ScanErr [err=%v", err)
 			continue
 		}
-
-		if difficultySQL.Valid {
-			question.Difficulty = difficultySQL.String
-		}
-		if explanationSQL.Valid {
-			question.Explanation = explanationSQL.String
-		}
-		if len(metaJSON) > 0 {
-			json.Unmarshal(metaJSON, &question.Meta)
-		}
-
 		questions = append(questions, question)
 	}
 
 	commons.Log(ctx, "[dao.ListByQuizID::OK [quiz_id=%s [count=%d", quizID, len(questions))
-	return questions, nil
+	return questions, rows.Err()
 }
 
 // UpdateQuestion updates question fields
@@ -161,17 +144,19 @@ func UpdateQuestion(ctx context.Context, question *model.Question) error {
 
 	metaJSON, _ := json.Marshal(question.Meta)
 	qry := `UPDATE questions
-			SET question_text = $1, question_type = $2, difficulty = NULLIF($3, ''), tags = $4,
-				points = $5, order_index = $6, explanation = $7, meta = $8, updated_at = NOW()
-			WHERE id = $9`
+			SET section_id = $1, question_text = $2, question_type = $3, difficulty = NULLIF($4, ''), tags = $5,
+				points = $6, order_index = $7, section_order_index = $8, explanation = $9, meta = $10, updated_at = NOW()
+			WHERE id = $11`
 
 	result, err := db.ExecContext(ctx, qry,
+		question.SectionID,
 		question.QuestionText,
 		question.QuestionType,
 		question.Difficulty,
 		pq.Array(question.Tags),
 		question.Points,
 		question.OrderIndex,
+		question.SectionOrderIndex,
 		question.Explanation,
 		metaJSON,
 		question.ID,
@@ -241,7 +226,7 @@ func CountByQuizID(ctx context.Context, quizID uuid.UUID) (int, error) {
 func ReorderQuestions(ctx context.Context, updates []model.QuestionReorder) error {
 	commons.Log(ctx, "[dao.ReorderQuestions [count=%d", len(updates))
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		commons.LogE(ctx, "[dao.ReorderQuestions::TxErr [err=%v", err)
 		return err
@@ -275,7 +260,7 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 		return nil
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		commons.LogE(ctx, "[dao.CreateQuestionsBulk::TxErr [err=%v", err)
 		return err
@@ -283,10 +268,10 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 	defer tx.Rollback()
 
 	qry := `INSERT INTO questions (
-				id, quiz_id, question_text, question_type, difficulty, tags, points, order_index,
-				explanation, meta, created_at, updated_at
+				id, quiz_id, section_id, question_text, question_type, difficulty, tags, points, order_index,
+				section_order_index, explanation, meta, created_at, updated_at
 			) VALUES (
-				$1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10, NOW(), NOW()
+				$1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, NOW(), NOW()
 			) RETURNING created_at, updated_at`
 
 	for _, question := range questions {
@@ -294,12 +279,14 @@ func CreateQuestionsBulk(ctx context.Context, questions []*model.Question) error
 		err := tx.QueryRowContext(ctx, qry,
 			question.ID,
 			question.QuizID,
+			question.SectionID,
 			question.QuestionText,
 			question.QuestionType,
 			question.Difficulty,
 			pq.Array(question.Tags),
 			question.Points,
 			question.OrderIndex,
+			question.SectionOrderIndex,
 			question.Explanation,
 			metaJSON,
 		).Scan(&question.CreatedAt, &question.UpdatedAt)

@@ -233,6 +233,15 @@ func initExt() {
 		quizzes.POST("/:id/publish", api.PublishQuiz)      // Publish quiz
 		quizzes.POST("/:id/unpublish", api.UnpublishQuiz)  // Unpublish quiz
 
+		// Section CRUD and ordering
+		quizzes.GET("/:id/sections", api.ListQuizSections)                  // List sections
+		quizzes.POST("/:id/sections", api.CreateQuizSection)                // Create section
+		quizzes.PATCH("/:id/sections/reorder", api.ReorderQuizSections)     // Reorder sections
+		quizzes.PATCH("/:id/questions/reorder", api.ReorderQuizQuestions)   // Reorder questions across sections
+		quizzes.PATCH("/questions/:qid/section", api.MoveQuestionToSection) // Move one question to a section
+		quizzes.PATCH("/:id/sections/:sid", api.UpdateQuizSection)          // Update section
+		quizzes.DELETE("/:id/sections/:sid", api.DeleteQuizSection)         // Delete section
+
 		// Question CRUD
 		quizzes.POST("/:id/questions", api.AddQuestion)           // Add question to quiz
 		quizzes.POST("/:id/questions/bulk", api.AddQuestionsBulk) // Add multiple questions to quiz

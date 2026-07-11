@@ -1538,3 +1538,153 @@ func ExtractQuestionsFromFile(c *gin.Context) {
 		},
 	})
 }
+
+func respondSectionError(c *gin.Context, err error) {
+	if commons.IsNotFound(err) {
+		commons.Resp404(c, commons.GetCode(err))
+		return
+	}
+	if commons.IsForbidden(err) {
+		commons.Resp403(c, commons.GetCode(err))
+		return
+	}
+	if commons.IsBadInput(err) {
+		commons.RespBadReq(c, commons.GetCode(err))
+		return
+	}
+	commons.RespISE(c, err)
+}
+
+// ListQuizSections lists sections for a quiz.
+func ListQuizSections(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+	sections, err := core.ListSections(ctx, c.Param("id"), userID.String())
+	if err != nil {
+		respondSectionError(c, err)
+		return
+	}
+	commons.RespOKWithMsg(c, "Sections retrieved successfully", gin.H{"sections": sections})
+}
+
+// CreateQuizSection creates a section for a quiz.
+func CreateQuizSection(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+	var req model.QuizSectionInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.RespBadReq(c, "invalid-request-body")
+		return
+	}
+	section, err := core.CreateSection(ctx, c.Param("id"), userID.String(), req)
+	if err != nil {
+		respondSectionError(c, err)
+		return
+	}
+	commons.RespOKWithMsg(c, "Section created successfully", section)
+}
+
+// UpdateQuizSection updates a section.
+func UpdateQuizSection(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+	var req model.QuizSectionUpdateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.RespBadReq(c, "invalid-request-body")
+		return
+	}
+	section, err := core.UpdateSection(ctx, c.Param("id"), c.Param("sid"), userID.String(), req)
+	if err != nil {
+		respondSectionError(c, err)
+		return
+	}
+	commons.RespOKWithMsg(c, "Section updated successfully", section)
+}
+
+// DeleteQuizSection deletes a section and moves its questions to General.
+func DeleteQuizSection(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+	if err := core.DeleteSection(ctx, c.Param("id"), c.Param("sid"), userID.String()); err != nil {
+		respondSectionError(c, err)
+		return
+	}
+	commons.RespOKWithMsg(c, "Section deleted successfully", nil)
+}
+
+// ReorderQuizSections reorders sections.
+func ReorderQuizSections(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+	var req model.SectionReorderInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.RespBadReq(c, "invalid-request-body")
+		return
+	}
+	if err := core.ReorderSections(ctx, c.Param("id"), userID.String(), req); err != nil {
+		respondSectionError(c, err)
+		return
+	}
+	commons.RespOKWithMsg(c, "Sections reordered successfully", nil)
+}
+
+// ReorderQuizQuestions reorders and moves questions between sections.
+func ReorderQuizQuestions(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+	var req model.QuestionSectionReorderInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.RespBadReq(c, "invalid-request-body")
+		return
+	}
+	if err := core.ReorderQuestionsInSections(ctx, c.Param("id"), userID.String(), req); err != nil {
+		respondSectionError(c, err)
+		return
+	}
+	commons.RespOKWithMsg(c, "Questions reordered successfully", nil)
+}
+
+// MoveQuestionToSection moves a question to the end of a section.
+func MoveQuestionToSection(c *gin.Context) {
+	ctx := commons.Ctx(c)
+	userID, ok := commons.UsrID(ctx)
+	if !ok {
+		commons.Resp401(c, "unauthorized")
+		return
+	}
+	var req model.QuestionSectionUpdateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		commons.RespBadReq(c, "invalid-request-body")
+		return
+	}
+	question, err := core.MoveQuestionToSection(ctx, c.Param("qid"), userID.String(), req)
+	if err != nil {
+		respondSectionError(c, err)
+		return
+	}
+	commons.RespOKWithMsg(c, "Question moved successfully", question)
+}

@@ -107,7 +107,8 @@ type QuizListItem struct {
 // QuizWithQuestions represents a quiz with all its questions
 type QuizWithQuestions struct {
 	Quiz
-	Questions []Question `json:"questions"`
+	Questions []Question    `json:"questions"`
+	Sections  []QuizSection `json:"sections,omitempty"`
 }
 
 // Validate validates quiz data
